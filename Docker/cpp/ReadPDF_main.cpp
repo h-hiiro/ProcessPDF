@@ -12,6 +12,7 @@
 
 #include "ReadPDF_main.hpp"
 #include "variables.hpp"
+#include "PDFParser.hpp"
 
 using namespace std;
 int main(int argc, char** argv){
@@ -21,9 +22,9 @@ int main(int argc, char** argv){
 	char* userPwd=NULL;
 	char* log_level_char=NULL;
 
-	int opt;
-	int longIndex;
-	opterr=0;
+	int opt; // getopt result
+	int longIndex; // index of the specified option
+	opterr=0; // disable error output
 	
 	while((opt=getopt_long(argc, argv, "hi:o:u:v:", longOpts, &longIndex))!=-1){
 		switch(opt){
@@ -72,7 +73,7 @@ int main(int argc, char** argv){
 		printf(help);
 		return -1;
 	}
-	Log(LOG_INFO, "Input file: %s", inputFilePath);
+	Log(LOG_INFO, "Input file is %s", inputFilePath);
 	if(userPwd!=NULL){
 		Log(LOG_INFO, "User password is specified");
 	}else{
@@ -83,6 +84,9 @@ int main(int argc, char** argv){
 	}else{
 		Log(LOG_INFO, "Owner password is NOT specified");
 	}
+
+	// Initialize PDFParser
+	PDFParser PP(inputFilePath);
 		
 	return 0;
 }

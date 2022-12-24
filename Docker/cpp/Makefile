@@ -1,7 +1,7 @@
 
 all: ReadPDF.o
 
-lib_r= log.o
+lib_r= log.o PDFParser.o Objects.o
 option=-g -l ssl -l crypto -lz -lgsasl -static
 
 ReadPDF.o: ReadPDF_main.o $(lib_r)
@@ -11,4 +11,4 @@ ReadPDF.o: ReadPDF_main.o $(lib_r)
 .cpp.o:
 	$(CXX) -c -g -Wno-format-security $<
 
-ReadPDF_main.o: log.hpp variables.hpp ReadPDF_main.hpp
+ReadPDF_main.o: log.hpp variables.hpp ReadPDF_main.hpp PDFParser.hpp
