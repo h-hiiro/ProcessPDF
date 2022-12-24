@@ -1,7 +1,7 @@
 
 all: ReadPDF.o
 
-lib_r= log.o PDFParser.o Objects.o
+lib_r= log.o PDFParser.o Objects.o Encryption.o
 option=-g -l ssl -l crypto -lz -lgsasl -static
 
 ReadPDF.o: ReadPDF_main.o $(lib_r)

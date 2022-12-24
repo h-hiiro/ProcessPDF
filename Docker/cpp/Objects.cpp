@@ -528,6 +528,9 @@ bool unsignedstrcmp(unsigned char* a, unsigned char* b){
 	}
 	return true;
 }
+bool unsignedstrcmp(unsigned char* a, const char* b){
+	return unsignedstrcmp(a, (unsigned char*)b);
+}
 
 int decodeData(unsigned char* encoded, unsigned char* filter, Dictionary* parm, int encodedLength, unsigned char** decoded){
 	Log(LOG_DEBUG, "decodeData: filter %s, encoded size: %d", filter, encodedLength);

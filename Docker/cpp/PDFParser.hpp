@@ -3,7 +3,7 @@
 #include <fstream>
 #include <string>
 #include "Objects.hpp"
-//#include "Encryption.hpp"
+#include "Encryption.hpp"
 
 #define PARSER_INCLUDED
 
@@ -80,8 +80,8 @@ public:
 	PDFParser(char* fileName);
 	ifstream file;
 	Dictionary trailer;
-	//Encryption* encryptObj;
-	//Encryption* encryptObj_ex;
+	Encryption* encryptObj; // for reading
+	Encryption* encryptObj_ex; // for exporting
 	int encryptObjNum;
 	Indirect** Reference;
 	int ReferenceSize;

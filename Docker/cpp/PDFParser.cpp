@@ -148,8 +148,8 @@ PDFParser::PDFParser(char* fileName):
 			error=true;
 			return;
 		}
-		//encryptObj=new Encryption(encrypt, ID);
-		//encryptObj_ex=new Encryption(encryptObj);
+		encryptObj=new Encryption(encryptDict, ID);
+		encryptObj_ex=new Encryption(encryptObj);
 		encrypted=true;
 	}else{
 		Log(LOG_INFO, "This document is not encrypted");

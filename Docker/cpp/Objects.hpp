@@ -94,7 +94,7 @@ public:
 };
 
 // String object
-// dec and enc mean 'decrypted' and 'encrypted' respectively
+// decr and encr mean 'decrypted' and 'encrypted' respectively
 class PDFStr{
 public:
 	int decrDataLen;
@@ -107,15 +107,16 @@ public:
 	PDFStr(int dDL);
 };
 
+// Stream object
 class Stream{
 public:
 	int objNumber;
 	int genNumber;
 	Dictionary StmDict;
-	unsigned char* decoData;  // decrypted, decoded
+	unsigned char* decoData; // decrypted, decoded
 	unsigned char* encoData; // decrypted, encoded
 	unsigned char* encrData; // encrypted, encoded
-	int decoDataLen;  // len(decData)
+	int decoDataLen; // len(decoData)
 	int encoDataLen; // len(encoData)
 	int encrDataLen; // len(encrData)
 	bool isDecrypted;
@@ -137,6 +138,7 @@ char* printObj(void* value, int type);
 
 int unsignedstrlen(unsigned char* a);
 bool unsignedstrcmp(unsigned char* a, unsigned char* b);
+bool unsignedstrcmp(unsigned char* a, const char* b);
 void unsignedstrcpy(unsigned char* dest, unsigned char* data);
 
 int decodeData(unsigned char* encoded, unsigned char* filter, Dictionary* parm, int encodedLength, unsigned char** decoded);

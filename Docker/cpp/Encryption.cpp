@@ -11,6 +11,12 @@
 
 #include "Encryption.hpp"
 
+#ifndef LOG_INCLUDED
+#include "log.hpp"
+#endif
+
+#include "variables_ext.hpp"
+
 /*
 OpenSSL
 EVP_MD_CTX *EVP_MD_CTX_new(void);
@@ -89,45 +95,41 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 	int rc;
 	rc=gsasl_init(&ctx);
 	if(rc!=GSASL_OK){
-		printf("GSASL initialization error(%d): %s\n", rc, gsasl_strerror(rc));
+		Log(LOG_ERROR, "GSASL initialization error(%d): %s", rc, gsasl_strerror(rc));
 		error=true;
 		return;
 	}
 	
 	int i, j;
-	cout << "Read Encrypt information" << endl;
+	Log(LOG_INFO, "Read Encrypt information");
 	// Filter: only /Standard can be processed in this program
-	int filterType;
-	void* filterValue;
 	unsigned char* filter;
-	if(encryptDict->Read((unsigned char*)"Filter", (void**)&filterValue, &filterType) && filterType==Type::Name){
-		filter=(unsigned char*)filterValue;
-		if(unsignedstrcmp(filter, (unsigned char*)"Standard")){
-			cout << "Filter: Standard" << endl;
+	if(encryptDict->Read("Filter", (void**)&filter, Type::Name)){
+		if(unsignedstrcmp(filter, "Standard")){
+			Log(LOG_INFO, "Filter name is Standard");
 		}else{
-			printf("Error: Filter %s is not supported\n", filter);
+			Log(LOG_ERROR, "Filter %s is not supported", filter);
 			error=true;
 			return;
 		}
 	}else{
-		cout << "Error in read /Filter" << endl;
+		Log(LOG_ERROR, "Failed in reading Filter");
 		error=true;
 		return;
 	}
 	// V: 1-5
-	int VType;
-	void* VValue;
-	if(encryptDict->Read((unsigned char*)"V", (void**)&VValue, &VType) && VType==Type::Int){
-		V=*((int*)VValue);
+	int* VValue;
+	if(encryptDict->Read("V", (void**)&VValue, Type::Int)){
+		V=*(VValue);
 		if(V==1 || V==2 || V==4 || V==5){
-			printf("V: %d\n", V);
+			Log(LOG_INFO, "V is %d", V);
 		}else{
-			printf("Error: V %d is invalid\n", V);
+			Log(LOG_ERROR, "%d is invalid as V", V);
 			error=true;
 			return;
 		}
 	}else{
-		cout << "Error in read /V " << endl;
+		Log(LOG_ERROR, "Failed in reading V");
 		error=true;
 		return;
 	}
@@ -139,18 +141,17 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 		Length=40;
 	}else if(V==2){
 		Length=40;
-		if(encryptDict->Search((unsigned char*)"Length")>=0){
-			int lengthType;
-			void* lengthValue;
-			if(encryptDict->Read((unsigned char*)"Length", (void**)&lengthValue, &lengthType) && lengthType==Type::Int){
-				Length=*((int*)lengthValue);
+		if(encryptDict->Search("Length")>=0){
+			int* lengthValue;
+			if(encryptDict->Read("Length", (void**)&lengthValue, Type::Int)){
+				Length=*lengthValue;
 				if(Length%8!=0){
-					printf("Error: Length %d is invalid\n", Length);
+					Log(LOG_ERROR, "%d is invalid as Length", Length);
 					error=true;
 					return;
 				}
 			}else{
-				cout << "Error in read /Length" << endl;
+				Log(LOG_ERROR, "Failed in reading Length");
 				error=true;
 				return;
 			}	
@@ -161,35 +162,34 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 		Length=256;
 	}
 	Length_bytes=Length/8;
-  printf("File encryption key length: %d bits = %d bytes\n", Length, Length_bytes);
+	Log(LOG_INFO, "File encryption key length: %d bits = %d bytes", Length, Length_bytes);
 	
 	// CF, StmF, StrF
 	if(V==4 || V==5){
 		// CF
-		if(encryptDict->Search((unsigned char*)"CF")>=0){
-			int CFType;
-			void* CFValue;
+		if(encryptDict->Search("CF")>=0){
 			CFexist=true;
-			if(encryptDict->Read((unsigned char*)"CF", (void**)&CFValue, &CFType) && CFType==Type::Dict){
-				CF=(Dictionary*)CFValue;
+			if(encryptDict->Read("CF", (void**)&CF, Type::Dict)){
+					// OK
 			}else{
-				cout << "Error in read /CF" << endl;
+				Log(LOG_ERROR, "Failed in reading CF");
 				error=true;
 				return;
 			}
-			printf("CF: %d entries\n", CF->getSize());
-			CF->Print();
+			Log(LOG_INFO, "CF has %d entries", CF->getSize());
+			if(LOG_LEVEL>=LOG_DEBUG){
+				Log(LOG_DEBUG, "CF dictionary:");
+				CF->Print();
+			}
 		}else{
-			cout << "No CF" << endl;
+			Log(LOG_WARN, "CF not found");
 		}
 		// StmF
-		if(encryptDict->Search((unsigned char*)"StmF")>=0){
-			int StmFType;
-			void* StmFValue;
-			if(encryptDict->Read((unsigned char*)"StmF", (void**)&StmFValue, &StmFType) && StmFType==Type::Name){
-				StmF=(unsigned char*)StmFValue;
+		if(encryptDict->Search("StmF")>=0){
+			if(encryptDict->Read("StmF", (void**)&StmF, Type::Name)){
+				// OK
 			}else{
-				cout << "Error in read /StmF" << endl;
+				Log(LOG_ERROR, "Failed in reading StmF");
 				error=true;
 				return;
 			}
@@ -198,20 +198,18 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 			unsignedstrcpy(StmF, Idn);
 		}
 		if(unsignedstrcmp(StmF, Idn) || (CFexist && CF->Search(StmF)>=0)){
-			printf("StmF: %s\n", StmF);
+			Log(LOG_INFO, "StmF is %s", StmF);
 		}else{
-			printf("Error: StmF %s not found\n", StmF);
+			Log(LOG_ERROR, "%s cannot be used as StmF", StmF);
 			error=true;
 			return;
 		}
 		// StrF
-		if(encryptDict->Search((unsigned char*)"StrF")>=0){
-			int StrFType;
-			void* StrFValue;
-			if(encryptDict->Read((unsigned char*)"StrF", (void**)&StrFValue, &StrFType) && StrFType==Type::Name){
-				StrF=(unsigned char*)StrFValue;
+		if(encryptDict->Search("StrF")>=0){
+			if(encryptDict->Read("StrF", (void**)&StrF, Type::Name)){
+				// OK
 			}else{
-				cout << "Error in read /StrF" << endl;
+				Log(LOG_ERROR, "Failed in reading  StrF");
 				error=true;
 				return;
 			}
@@ -220,153 +218,153 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 			unsignedstrcpy(StrF, Idn);
 		}
 		if(unsignedstrcmp(StrF, Idn) || (CFexist && CF->Search(StrF)>=0)){
-			printf("StrF: %s\n", StrF);
+			Log(LOG_INFO, "StrF is %s", StrF);
 		}else{
-			printf("Error: StrF %s not found\n", StrF);
-			error=true;
+			Log(LOG_ERROR, "%s cannot be used as StrF", StrF);			error=true;
 			return;
 		}
 	}
 
 	// R
-	int RType;
-	void* RValue;
-	if(encryptDict->Read((unsigned char*)"R", (void**)&RValue, &RType) && RType==Type::Int){
-		R=*((int*)RValue);
+	int* RValue;
+	if(encryptDict->Read((unsigned char*)"R", (void**)&RValue, Type::Int)){
+		R=*(RValue);
 		if(2<=R && R<=6){
-			printf("R: %d\n", R);
+			Log(LOG_INFO, "R is %d", R);
 		}else{
-			printf("Error: R %d is invalid\n", R);
+			Log(LOG_ERROR, "%d is invalid as R", R);
 			error=true;
 			return;
 		}
 	}
 	// O and U
-	int OUType;
-	void* OUValue;
-	if(encryptDict->Read((unsigned char*)"O", (void**)&OUValue, &OUType) && OUType==Type::String){
-		O=(uchar*)OUValue;
+	if(encryptDict->Read((unsigned char*)"O", (void**)&O, Type::String) &&\
+		 encryptDict->Read((unsigned char*)"U", (void**)&U, Type::String)){
+		// OK
 	}else{
-		cout << "Error in read /O" << endl;
+		Log(LOG_ERROR, "Failed in reading O or U");
 		error=true;
 		return;
 	}
-	if(encryptDict->Read((unsigned char*)"U", (void**)&OUValue, &OUType) && OUType==Type::String){
-		U=(uchar*)OUValue;
-	}else{
-		cout << "Error in read /U" << endl;
-		error=true;
-		return;
+	if(LOG_LEVEL>=LOG_DEBUG){
+		Log(LOG_DEBUG, "O and U:");
+		int size;
+		size=O->decrDataLen;
+		cout << "O: ";
+		for(i=0; i<size; i++){
+			printf("%02x ", O->decrData[i]);
+		}
+		cout << endl;
+		size=U->decrDataLen;
+		cout << "U: ";
+		for(i=0; i<size; i++){
+			printf("%02x ", U->decrData[i]);
+		}
+		cout << endl;
 	}
-	int size;
-	size=O->length;
-	cout << "O: ";
-	for(i=0; i<size; i++){
-		printf("%02x ", O->data[i]);
-	}
-	cout << endl;
-	size=U->length;
-	cout << "U: ";
-	for(i=0; i<size; i++){
-		printf("%02x ", U->data[i]);
-	}
-	cout << endl;
 	// OE and UE
 	if(R==6){
-		if(encryptDict->Read((unsigned char*)"OE", (void**)&OUValue, &OUType) && OUType==Type::String){
-			OE=(uchar*)OUValue;
+		if(encryptDict->Read("OE", (void**)&OE, Type::String) &&\
+			 encryptDict->Read("UE", (void**)&UE, Type::String)){
+			//OK
 		}else{
-			cout << "Error in read /OE" << endl;
+			Log(LOG_ERROR, "Failed in reading OE or UE");
 			error=true;
 			return;
 		}
-		if(encryptDict->Read((unsigned char*)"UE", (void**)&OUValue, &OUType) && OUType==Type::String){
-			UE=(uchar*)OUValue;
-		}else{
-			cout << "Error in read /UE" << endl;
-			error=true;
-			return;
+		if(LOG_LEVEL>=LOG_DEBUG){
+			Log(LOG_DEBUG, "OE and UE:");
+			int size;
+			size=OE->decrDataLen;
+			cout << "OE: ";
+			for(i=0; i<size; i++){
+				printf("%02x ", OE->decrData[i]);
+			}
+			cout << endl;
+			size=UE->decrDataLen;
+			cout << "UE: ";
+			for(i=0; i<size; i++){
+				printf("%02x ", U->decrData[i]);
+			}
+			cout << endl;
 		}
-		int size;
-		size=OE->length;
-		cout << "OE: ";
-		for(i=0; i<size; i++){
-			printf("%02x ", OE->data[i]);
-		}
-		cout << endl;
-		size=UE->length;
-		cout << "UE: ";
-		for(i=0; i<size; i++){
-			printf("%02x ", U->data[i]);
-		}
-		cout << endl;
 	}
 	// P, bit position is from low-order to high-order
-	int PType;
-	void* PValue;
+	unsigned int* PValue;
 	unsigned int P_i;
-	if(encryptDict->Read((unsigned char*)"P", (void**)&PValue, &PType) && PType==Type::Int){
-		P_i=*((unsigned int*)PValue);
+	if(encryptDict->Read("P", (void**)&PValue, Type::Int)){
+		P_i=*PValue;
 		for(i=0; i<32; i++){
 			P[i]=((P_i>>i & 1)==1);
 		}
 	}else{
-		cout << "Error in read P" << endl;
+		Log(LOG_ERROR, "Failed in reading P");
+		error=true;
+		return;
 	}
-	cout << "P (1->32): ";
-	for(i=0; i<32; i++){
-		printf("%1d", P[i] ? 1 : 0);
+	if(LOG_LEVEL>=LOG_INFO){
+		Log(LOG_INFO, "P (1->32):");
+		for(i=0; i<32; i++){
+			printf("%1d", P[i] ? 1 : 0);
+		}
+		cout << endl;
 	}
-	cout << endl;
 	// Perms
 	if(R==6){
-		void* permsValue;
-		int permsType;
-		
-		if(encryptDict->Read((unsigned char*)"Perms", (void**)&permsValue, &permsType) && permsType==Type::String){
-			Perms=(uchar*)permsValue;
+		if(encryptDict->Read("Perms", (void**)&Perms, Type::String)){
+			// OK
 		}else{
-			cout << "Error in read /Perms" << endl;
+			Log(LOG_ERROR, "Failed in reading Perms");
 			error=true;
 			return;
 		}
 		int size;
-		size=Perms->length;
-		cout << "Perms: ";
-		for(i=0; i<size; i++){
-			printf("%02x ", Perms->data[i]);
+		size=Perms->decrDataLen;
+		if(LOG_LEVEL>=LOG_DEBUG){
+			Log(LOG_DEBUG, "Perms:");
+			for(i=0; i<size; i++){
+				printf("%02x ", Perms->decrData[i]);
+			}
+			cout << endl;
 		}
-		cout << endl;
 	}
 	// EncryptMetadata
 	if(V==4 || V==5){
-		if(encryptDict->Search((unsigned char*)"EncryptMetadata")>=0){
-			void* encryptMetaValue;
-			int encryptMetaType;
-			if(encryptDict->Read((unsigned char*)"EncryptMetadata", (void**)&encryptMetaValue, &encryptMetaType) && encryptMetaType==Type::Bool){
-				encryptMeta=*((bool*)encryptMetaValue);
+		if(encryptDict->Search("EncryptMetadata")>=0){
+			bool* encryptMetaValue;
+			if(encryptDict->Read("EncryptMetadata", (void**)&encryptMetaValue, Type::Bool)){
+				encryptMeta=*(encryptMetaValue);
+			}else{
+				Log(LOG_ERROR, "Failed in reading EncryptMetadata");
+				error=true;
+				return;
 			}
 		}
-		printf("EncryptMetadata: %s\n", encryptMeta ? "true": "false");
+		Log(LOG_INFO, "EncryptMetadata is %s", encryptMeta ? "true": "false");
 	}
 	// ID
-	void* IDValue;
-	int IDType;
 	for(i=0; i<2; i++){
-		if(ID->Read(i, (void**)&IDValue, &IDType) && IDType==Type::String){
-			IDs[i]=(uchar*)IDValue;
+		if(ID->Read(i, (void**)&(IDs[i]), Type::String)){
+			// OK
 		}else{
-			cout << "Error in read ID elements" << endl;
+			Log(LOG_ERROR, "Failed in reading ID elements");
 			error=true;
 			return;
 		}
-		printf("ID[%d]: ", i);
-		for(j=0; j<IDs[i]->length; j++){
-			printf("%02x ", IDs[i]->data[j]);
+	}
+	
+	if(LOG_LEVEL>=LOG_DEBUG){
+		Log(LOG_DEBUG, "IDs:");
+		for(i=0; i<2; i++){
+			printf("ID[%d]: ", i);
+			for(j=0; j<IDs[i]->decrDataLen; j++){
+				printf("%02x ", IDs[i]->decrData[j]);
+			}
+			cout << endl;
 		}
-		cout << endl;
 	}
 
+	/*
 	// Authentication test (user)
 	cout << "Trial user authentication with no password" << endl;
 	if(!AuthUser()){
@@ -476,10 +474,10 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 			error=true;
 			return;
 		}
-	}
+		}*/
 		
 }
-
+/*
 bool Encryption::DecryptString(uchar* str, int objNumber, int genNumber){
 	if(!FEKObtained){
 		cout << "Not yet authenticated" << endl;
@@ -1344,12 +1342,12 @@ uchar* Encryption::trialU(uchar* fek){
 			for(j=0; j<Length_bytes; j++){
 				fek_i[j]=(fek->data[j])^((unsigned char)i);
 			}
-			/*
-			printf("RC4 encryption key: ");
-			for(j=0; j<Length_bytes; j++){
-				printf("%02x ", fek_i[j]);
-			}
-			cout << endl;*/
+			
+			//printf("RC4 encryption key: ");
+			//for(j=0; j<Length_bytes; j++){
+			//	printf("%02x ", fek_i[j]);
+		//}
+			//cout << endl;
 			result=EVP_CIPHER_CTX_reset(rc4ctx);
 			if(result!=1){
 				cout << "EVP_CIPHER_CTX_reset failed" << endl;
@@ -1377,12 +1375,12 @@ uchar* Encryption::trialU(uchar* fek){
 				return NULL;
 			}
 			rc4count+=rc4finalCount;
-			/*
-			printf("RC4 encrypted %d bytes: ", rc4count);
-			for(j=0; j<rc4count; j++){
-				printf("%02x ", encrypted_rc4[j]);
-			}
-			cout << endl;*/
+			
+//printf("RC4 encrypted %d bytes: ", rc4count);
+//for(j=0; j<rc4count; j++){
+//	printf("%02x ", encrypted_rc4[j]);
+//}
+//cout << endl;
 		}
 		uchar* tU=new uchar();
 		tU->data=new unsigned char[rc4count+1];
@@ -1413,20 +1411,20 @@ uchar* Encryption::trialU6(uchar* pwd){
 		printf("GSASL SASLprep error(%d): %s\n", stringpreprc, gsasl_strerror(stringpreprc));
 		return NULL;
 	}
-	/*
-	cout << "SASLprep" << endl;
-	cout << out << endl;
-	i=0;
-	cout << "SASLprep" << endl;
-	while(true){
-		if(out[i]!='\0'){
-			printf("%02x ", out[i]);
-			i++;
-		}else{
-			cout << endl;
-			break;
-		}
-		}*/
+	
+	//cout << "SASLprep" << endl;
+	//cout << out << endl;
+	//	i=0;
+	//cout << "SASLprep" << endl;
+	//while(true){
+	//	if(out[i]!='\0'){
+	//		printf("%02x ", out[i]);
+	//		i++;
+	//	}else{
+	//		cout << endl;
+			//		break;
+	//	}
+	//	}
 
 	// concatenate pwd with User Validation Salt
 	uchar* input=new uchar();
@@ -1506,12 +1504,12 @@ uchar* Encryption::Hash6(uchar* input, bool owner, int saltLength){
 				}
 			}
 		}
-		/*cout << "K1 length: " << K1->length << endl;
+		//cout << "K1 length: " << K1->length << endl;
 		
-		for(i=0; i<K1->length; i++){
-			printf("%02x ", K1->data[i]);
-		}
-		cout << endl;*/
+		//for(i=0; i<K1->length; i++){
+		//	printf("%02x ", K1->data[i]);
+		//}
+		//cout << endl;
 		// AES, CBC mode encrypt
 		int aescount;
 		result=EVP_CIPHER_CTX_reset(aesctx);
@@ -1539,12 +1537,12 @@ uchar* Encryption::Hash6(uchar* input, bool owner, int saltLength){
 		}
 		aescount+=aesfinalCount;
 		E->length=aescount;
-		/*
-		cout << "E length: " << E->length << endl;
-		for(i=0; i<E->length; i++){
-			printf("%02x ", (unsigned int)E->data[i]);
-		}
-		cout << endl;*/
+		
+		//cout << "E length: " << E->length << endl;
+		//for(i=0; i<E->length; i++){
+		//	printf("%02x ", (unsigned int)E->data[i]);
+		//}
+		//cout << endl;
 
 		int remainder=0;
 		for(i=0; i<16; i++){
@@ -1583,12 +1581,12 @@ uchar* Encryption::Hash6(uchar* input, bool owner, int saltLength){
 		}
 		// cout << count << endl;
 		round++;
-		/*
-		printf("K in round %3d: ", round);
-		for(i=0; i<K->length; i++){
-			printf("%02x ", K->data[i]);
-		}
-		cout << endl;*/
+		
+		//printf("K in round %3d: ", round);
+		//for(i=0; i<K->length; i++){
+		//	printf("%02x ", K->data[i]);
+		//}
+		//cout << endl;
 		
 		// cout << "E " << (unsigned int) E->data[E->length-1] << endl;
 		if((unsigned int)E->data[E->length-1]>(round-32)){
@@ -1619,20 +1617,20 @@ uchar* Encryption::trialO6(uchar* pwd){
 		printf("GSASL SASLprep error(%d): %s\n", stringpreprc, gsasl_strerror(stringpreprc));
 		return NULL;
 	}
-	/*
-	cout << "SASLprep" << endl;
-	cout << out << endl;
-	i=0;
-	cout << "SASLprep" << endl;
-	while(true){
-		if(out[i]!='\0'){
-			printf("%02x ", out[i]);
-			i++;
-		}else{
-			cout << endl;
-			break;
-		}
-		}*/
+	
+	//cout << "SASLprep" << endl;
+	//cout << out << endl;
+	//i=0;
+	//cout << "SASLprep" << endl;
+	//while(true){
+	//	if(out[i]!='\0'){
+	//		printf("%02x ", out[i]);
+	//		i++;
+	//	}else{
+	//		cout << endl;
+	//		break;
+	//	}
+//	}
 
 	// concatenate pwd with Owner Validation Salt and U (48 bytes)
 	uchar* input=new uchar();
@@ -1735,12 +1733,12 @@ uchar* Encryption::fileEncryptionKey(uchar* pwd){
 			cout << "EVP_DigestFinal failed" << endl;
 			return NULL;
 		}
-		/*
-		printf("%d bytes, ", count);
-		for(i=0; i<count; i++){
-			printf("%02x ", hashed_md5[i]);
-		}
-		cout << endl;*/
+		
+		//printf("%d bytes, ", count);
+		//for(i=0; i<count; i++){
+		//	printf("%02x ", hashed_md5[i]);
+		//}
+		//cout << endl;
 		if(R>=3){
 			unsigned char hash_input[Length_bytes];
 			result=EVP_MD_CTX_reset(ctx);
@@ -1777,12 +1775,12 @@ uchar* Encryption::fileEncryptionKey(uchar* pwd){
 					cout << "EVP_DigestFinal failed in loop" << endl;
 					return NULL;
 				}
-				/*
-				printf("#%d: %d bytes, ", i, count);
-				for(j=0; j<count; j++){
-					printf("%02x ", hashed_md5[j]);
-				}
-				cout << endl;*/
+				
+				//printf("#%d: %d bytes, ", i, count);
+				//for(j=0; j<count; j++){
+				//	printf("%02x ", hashed_md5[j]);
+				//}
+				//cout << endl;
 			}
 		}
 		uchar* fek=new uchar();
@@ -2048,12 +2046,12 @@ uchar* Encryption::RC4EncryptionKey(uchar* pwd){
 					cout << "EVP_DigestFinal failed in loop" << endl;
 					return NULL;
 				}
-				/*
-				printf("#%d: %d bytes, ", i, count);
-				for(j=0; j<count; j++){
-					printf("%02x ", hashed_md5[j]);
-				}
-				cout << endl;*/
+				
+				//printf("#%d: %d bytes, ", i, count);
+				//for(j=0; j<count; j++){
+				//	printf("%02x ", hashed_md5[j]);
+				//}
+				//cout << endl;
 			}
 		}
 		uchar* fek=new uchar();
@@ -2098,12 +2096,12 @@ uchar* Encryption::DecryptO(uchar* RC4fek){
 			for(j=0; j<Length_bytes; j++){
 				fek_i[j]=(RC4fek->data[j])^((unsigned char)i);
 			}
-			/*
-			printf("RC4 encryption key: ");
-			for(j=0; j<Length_bytes; j++){
-				printf("%02x ", fek_i[j]);
-			}
-			cout << endl;*/
+			
+			//printf("RC4 encryption key: ");
+			//for(j=0; j<Length_bytes; j++){
+			//	printf("%02x ", fek_i[j]);
+			//}
+			//cout << endl;
 			result=EVP_CIPHER_CTX_reset(rc4ctx);
 			if(result!=1){
 				cout << "EVP_CIPHER_CTX_reset failed" << endl;
@@ -2130,12 +2128,12 @@ uchar* Encryption::DecryptO(uchar* RC4fek){
 				return NULL;
 			}
 			rc4count+=rc4finalCount;
-			/*
-			printf("RC4 decrypted %d bytes: ", rc4count);
-			for(j=0; j<rc4count; j++){
-				printf("%02x ", unencrypted[j]);
-			}
-			cout << endl;*/
+			
+			//printf("RC4 decrypted %d bytes: ", rc4count);
+			//for(j=0; j<rc4count; j++){
+			//	printf("%02x ", unencrypted[j]);
+			//}
+			//cout << endl;
 		}
 		uchar* tUser=new uchar();
 		tUser->data=new unsigned char[rc4count+1];
@@ -2565,3 +2563,4 @@ Dictionary* Encryption::exportDict(){
 	return ret;
 }
 
+*/

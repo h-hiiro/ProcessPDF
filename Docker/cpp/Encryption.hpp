@@ -12,36 +12,34 @@
 class Encryption{
 private:
 	Dictionary* encryptDict;
-	int V;
 	bool error;
-	int Length;
-	int Length_bytes;
-	bool CFexist;
-	Dictionary* CF;
-	unsigned char* StmF;
-	unsigned char* StrF;
-	unsigned char* Idn;
-	int R;
-	uchar* O;
-	uchar* U;
-	uchar* OE;
-	uchar* UE;
-	uchar* Perms;
-	uchar* FEK;
-	bool FEKObtained;
-	bool P[32];
-	bool encryptMeta;
-	uchar* fileEncryptionKey(uchar* pwd);
-	uchar* fileEncryptionKey6(uchar* pwd, bool owner);
-	uchar* encryptFEK6(uchar* pwd, bool owner);
-	uchar* IDs[2];
-	uchar* trialU(uchar* fek);
-	uchar* trialU6(uchar* pwd);
-	uchar* trialO6(uchar* pwd);
-	uchar* Hash6(uchar* input, bool owner, int saltLength);
-	uchar* RC4EncryptionKey(uchar* pwd);
-	uchar* DecryptO(uchar* RC4fek);
-	void EncryptO(unsigned char* paddedUserPwd, uchar* RC4fek);
+	int V;                // Version of the encryption algorithm
+	int Length;           // Length of the file encryption key (bits)
+	int Length_bytes;     // Length of the FEK (bytes)
+	bool CFexist;         // Whether CF dictionary exists or not
+	Dictionary* CF;       // CF (crypt filter) dictionary
+	unsigned char* StmF;  // Default filter name for Stream
+	unsigned char* StrF;  // Default filter name for String
+	unsigned char* Idn;   // Identity filter name "Identity"
+	int R;                // Security handler revision
+	PDFStr* O;PDFStr* OE; // Owner-related byte strings
+	PDFStr* U;PDFStr* UE; // User-related byte strings
+	bool P[32];           // Permission flags
+	PDFStr* Perms;        // A byte string specifying permission
+	PDFStr* FEK;          // File encryption key
+	bool FEKObtained;     // Whether the FEK is obtained
+	bool encryptMeta;     // Whether the metadata is encrypted
+	PDFStr* IDs[2];
+	PDFStr* fileEncryptionKey(PDFStr* pwd);
+	PDFStr* fileEncryptionKey6(PDFStr* pwd, bool owner);
+	PDFStr* encryptFEK6(PDFStr* pwd, bool owner);
+	PDFStr* trialU(PDFStr* fek);
+	PDFStr* trialU6(PDFStr* pwd);
+	PDFStr* trialO6(PDFStr* pwd);
+	PDFStr* Hash6(PDFStr* input, bool owner, int saltLength);
+	PDFStr* RC4EncryptionKey(PDFStr* pwd);
+	PDFStr* DecryptO(PDFStr* RC4fek);
+	void EncryptO(unsigned char* paddedUserPwd, PDFStr* RC4fek);
 	bool ExecDecryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
 	bool ExecEncryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
 	void prepareIV(unsigned char* iv);
@@ -49,19 +47,19 @@ public:
 	Encryption(Dictionary* encrypt, Array* ID);
 	Encryption();
 	Encryption(Encryption* original);
-	bool AuthUser(uchar* pwd);
+	bool AuthUser(PDFStr* pwd);
 	bool AuthUser();
-	bool AuthOwner(uchar* pwd);
+	bool AuthOwner(PDFStr* pwd);
 	bool AuthOwner();
 	bool DecryptStream(Stream* stm);
-	bool DecryptString(uchar* str, int objNumber, int genNumber);
+	bool DecryptString(PDFStr* str, int objNumber, int genNumber);
 	bool EncryptStream(Stream* stm);
-	bool EncryptString(uchar* str, int objNumber, int genNumber);
-	uchar* GetPassword();
+	bool EncryptString(PDFStr* str, int objNumber, int genNumber);
+	PDFStr* GetPassword();
 	int getV();
 	void setV(int V_new);
 	void setCFM(char* CFM_new);
-	void setPwd(Array* ID, uchar* userPwd, uchar* ownerPwd);
+	void setPwd(Array* ID, PDFStr* userPwd, PDFStr* ownerPwd);
 	void setP(bool* P_new);
 	Dictionary* exportDict();
 	bool aa(){
