@@ -236,13 +236,15 @@ bool Array::Read(int index, void** value, int type){
 	}
 }
 
-Indirect::Indirect(){
-	objNumber=-1;
-	objStream=false;
+Indirect::Indirect():
+	objNumber(-1),
+	objStream(false),
+	notEncrypted(false)
+{
 }
 
 Stream::Stream():
-	isDecrypted(false)
+	decrypted(false)
 {	
 }
 
@@ -809,13 +811,13 @@ Page::Page(){
 }
 
 PDFStr::PDFStr():
-	isDecrypted(false),
+	decrypted(false),
 	isHexStr(false)
 {
 }
 
 PDFStr::PDFStr(int dDL):
-	isDecrypted(false),
+	decrypted(false),
 	isHexStr(false)
 {
 	decrDataLen=dDL;
@@ -912,4 +914,12 @@ void PDFVersion::print(){
 
 bool PDFVersion::isValid(){
 	return (!error) && valid;
+}
+
+void DumpPDFStr(PDFStr* str){
+	int i;
+	for(i=0; i<str->decrDataLen; i++){
+		printf("%02x ", str->decrData[i]);
+	}
+	cout << endl;
 }

@@ -85,6 +85,7 @@ public:
 	int genNumber;
 	int position; // negative position means value includes the value
 	bool used;
+	bool notEncrypted;
 	int type;
 	bool objStream;
 	int objStreamNumber;
@@ -99,7 +100,7 @@ class PDFStr{
 public:
 	int decrDataLen;
 	int encrDataLen;
-	bool isDecrypted;
+	bool decrypted;
 	unsigned char* decrData;
 	unsigned char* encrData;
 	bool isHexStr;
@@ -119,7 +120,7 @@ public:
 	int decoDataLen; // len(decoData)
 	int encoDataLen; // len(encoData)
 	int encrDataLen; // len(encrData)
-	bool isDecrypted;
+	bool decrypted;
 	Stream();
 	bool Decode();
 	bool Encode();
@@ -149,6 +150,8 @@ int PNGPredictor(unsigned char** pointer, int length, Dictionary* columns);
 int byteSize(int n);
 
 PDFStr* dateString();
+
+void DumpPDFStr(PDFStr* str);
 
 class PDFVersion{
 private:

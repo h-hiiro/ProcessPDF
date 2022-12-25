@@ -27,7 +27,7 @@ private:
 	bool P[32];           // Permission flags
 	PDFStr* Perms;        // A byte string specifying permission
 	PDFStr* FEK;          // File encryption key
-	bool FEKObtained;     // Whether the FEK is obtained
+	bool FEKObtained;     // Whether the FEK is obtained (= user or owner password is given)
 	bool encryptMeta;     // Whether the metadata is encrypted
 	PDFStr* IDs[2];
 	PDFStr* fileEncryptionKey(PDFStr* pwd);
@@ -36,21 +36,19 @@ private:
 	PDFStr* trialU(PDFStr* fek);
 	PDFStr* trialU6(PDFStr* pwd);
 	PDFStr* trialO6(PDFStr* pwd);
-	PDFStr* Hash6(PDFStr* input, bool owner, int saltLength);
+	PDFStr* hash6(PDFStr* input, bool owner, int saltLength);
 	PDFStr* RC4EncryptionKey(PDFStr* pwd);
 	PDFStr* DecryptO(PDFStr* RC4fek);
 	void EncryptO(unsigned char* paddedUserPwd, PDFStr* RC4fek);
-	bool ExecDecryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
-	bool ExecEncryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
+	bool execDecryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
+	bool execEncryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
 	void prepareIV(unsigned char* iv);
 public:
 	Encryption(Dictionary* encrypt, Array* ID);
 	Encryption();
 	Encryption(Encryption* original);
 	bool AuthUser(PDFStr* pwd);
-	bool AuthUser();
 	bool AuthOwner(PDFStr* pwd);
-	bool AuthOwner();
 	bool DecryptStream(Stream* stm);
 	bool DecryptString(PDFStr* str, int objNumber, int genNumber);
 	bool EncryptStream(Stream* stm);

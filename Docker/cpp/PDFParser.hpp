@@ -76,22 +76,24 @@ private:
 	bool readDict(Dictionary* dict, istream* is);
 	bool readStream(Stream* stm, bool outputError=true);
 	bool investigatePages(Indirect* pages, int* pageCount);
-public:
-	PDFParser(char* fileName);
 	ifstream file;
 	Dictionary trailer;
 	Encryption* encryptObj; // for reading
 	Encryption* encryptObj_ex; // for exporting
-	int encryptObjNum;
 	Indirect** Reference;
 	int ReferenceSize;
 	Page** Pages;
 	int PagesSize;
 	int lastXRefStm;
+public:
+	PDFParser(char* fileName);
 	bool HasError();
 	bool IsEncrypted();
 	bool ReadRefObj(Indirect* ref, void** object, int* objType);
 	bool ReadRefObj(Indirect* ref, void** object, int objType);
-	bool readPage(int index, unsigned char* key, void** value, int* type, bool inheritable);
 	bool Read(Dictionary* dict, const char* key, void** value, int type);
+	bool AuthUser(char* pwd);
+	bool AuthOwner(char* pwd);
+	
+	bool readPage(int index, unsigned char* key, void** value, int* type, bool inheritable);
 };

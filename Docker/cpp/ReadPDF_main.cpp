@@ -87,6 +87,48 @@ int main(int argc, char** argv){
 
 	// Initialize PDFParser
 	PDFParser PP(inputFilePath);
+
+	if(PP.HasError()){
+		Log(LOG_ERROR, "Parse failed");
+		return -1;
+	}
+
+	// Check the authentication
+	// if the password is not given, try to authenticate with no password
+	if(PP.IsEncrypted()){
+		// user
+		if(userPwd!=NULL){
+			if(PP.AuthUser(userPwd)){
+				Log(LOG_INFO, "User password is ok");
+			}else{
+				Log(LOG_WARN, "User password is NOT ok");
+			}
+		}
+		// owner
+		if(ownerPwd!=NULL){
+			if(PP.AuthOwner(ownerPwd)){
+				Log(LOG_INFO, "Owner password is ok");
+			}else{
+				Log(LOG_WARN, "Owner password is NOT ok");
+			}
+		}
+		// when none is given
+		if(userPwd==NULL && ownerPwd==NULL){
+		  char* blankPwd=new char[1];
+			blankPwd[0]='\0';
+			if(PP.AuthUser(blankPwd)){
+				Log(LOG_INFO, "User password (blank) is ok");
+			}else{
+				Log(LOG_WARN, "User password (blank) is NOT ok");
+			}
+			if(PP.AuthOwner(blankPwd)){
+				Log(LOG_INFO, "Owner password (blank) is ok");
+			}else{
+				Log(LOG_WARN, "Owner password (blank) is NOT ok");
+			}
+			
+		}
+	}
 		
 	return 0;
 }

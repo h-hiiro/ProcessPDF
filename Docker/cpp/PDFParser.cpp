@@ -16,8 +16,7 @@ PDFParser::PDFParser(char* fileName):
 	file(fileName),
 	error(false),
 	encrypted(false),
-	lastXRefStm(-1),
-	encryptObjNum(-1)
+	lastXRefStm(-1)
 {
 	// file check
 	if(!file){
@@ -73,7 +72,6 @@ PDFParser::PDFParser(char* fileName):
 		trailer.Print();
 	}
 
-	
 	// prepare xref database
 	int* Size;
   if(trailer.Read("Size", (void**)&Size, Type::Int)){
@@ -114,9 +112,14 @@ PDFParser::PDFParser(char* fileName):
 					 Reference[i]->used ? "used" : "free");
 			if(Reference[i]->used){
 				if(Reference[i]->objStream){
-					printf("index %-3d of objStream (#%-3d)\n", Reference[i]->objStreamIndex, Reference[i]->objStreamNumber);
+					printf("index %-3d of objStream (#%-3d)", Reference[i]->objStreamIndex, Reference[i]->objStreamNumber);
 				}else{
-					printf("position %d\n", Reference[i]->position);
+					printf("position %d", Reference[i]->position);
+				}
+				if(Reference[i]->notEncrypted){
+					printf(", not encrypted\n");
+				}else{
+					printf("\n");
 				}
 			}else{
 				printf("\n");
@@ -154,40 +157,30 @@ PDFParser::PDFParser(char* fileName):
 	}else{
 		Log(LOG_INFO, "This document is not encrypted");
 	}
-			
-			
-			/*
+
+	/*
 	// find /Version in Document catalog dictrionary
-	Log(LOG_INFO, "Find /Version in Document catalog dictionary");
-	int dCatalogType;
-	void* dCatalogValue;
-	Indirect* dCatalogRef;
+	// The procedure fails when the Document Catalog Dictionary is in an encrypted object stream
+	Log(LOG_INFO, "Try to find /Version in Document catalog dictionary");
 	Dictionary* dCatalog;
-	if(trailer.Read((unsigned char*)"Root", (void**)&dCatalogValue, &dCatalogType) && dCatalogType==Type::Indirect){
-		dCatalogRef=(Indirect*)dCatalogValue;
-		if(readRefObj(dCatalogRef, (void**)&dCatalogValue, &dCatalogType) && dCatalogType==Type::Dict){
-			dCatalog=(Dictionary*)dCatalogValue;
-			int versionType;
-			void* versionValue;
-			if(dCatalog->Read((unsigned char*)"Version", (void**)&versionValue, &versionType) && versionType==Type::Name){
-				unsigned char* version=(unsigned char*)versionValue;
-				V_catalog.set((char*)version);
-				V_catalog.print();
-				printf("Version in document catalog dictionary is %s\n", V_catalog.v);
+	if(trailer.Search("Root")<0){
+		Log(LOG_ERROR, "Root not found in the trailer"); error=true; return;
+	}
+	if(Read(&trailer, "Root", (void**)&dCatalog, Type::Dict)){
+	  char* version;
+		if(dCatalog->Search("Version")>=0){
+			if(dCatalog->Read("Version", (void**)&version, Type::Name)){
+				v_catalog.set(version);
+				Log(LOG_INFO, "Version in document catalog dictionary is %s", v_catalog.v);
 			}else{
-				cout << "No version information in document catalog dictionary" << endl;
+				Log(LOG_ERROR, "Failed in reading Version"); error=true; return;
 			}
 		}else{
-			cout << "Error in read Document catalog dictionary" << endl;
-			error=true;
-			return;
+			Log(LOG_INFO, "No version information in document catalog dictionary");
 		}
 	}else{
-		cout << "Error in Document catalog dictionary" << endl;
-		error=true;
-		return;
+		Log(LOG_WARN, "Failed in reading Document catalog dictionary");
 	}
-	cout << endl;
 
 	
 	cout << "Read page information" << endl;
@@ -334,7 +327,7 @@ bool PDFParser::readPage(int index, unsigned char* key, void** value, int* type,
 }
 
 */
-		
+
 bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 	int i;
 	int objNumber=ref->objNumber;
@@ -363,14 +356,13 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 			Log(LOG_ERROR, "Failed in reading an object stream");
 			return false;
 		}
-		/* TODO
-		if(encrypted){
-			cout << "Decrypt stream" << endl;
+		if(encrypted && refInRef->notEncrypted==false){
+			Log(LOG_DEBUG, "Decrypt stream");
 			if(!encryptObj->DecryptStream(objStream)){
-				cout << "Error in decrypting stream" << endl;
+				Log(LOG_ERROR, "Error in decrypting stream");
 				return false;
 			}
-			}*/
+		}
 		objStream->Decode();
 
 		// get the offset
@@ -450,7 +442,6 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 			if(!readDict((Dictionary*)*object, &is)){
 				Log(LOG_ERROR, "Failed in read Dict"); return false;
 			}
-			// ((Dictionary*)*object)->Print();
 			break;
 		default:
 			Log(LOG_ERROR, "Invalid type"); return false;
@@ -534,62 +525,70 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 		default:
 			Log(LOG_ERROR, "Invalid type"); return false;
 		}
-		/*
+		
 		// encryption check
-		if(encrypted && objNumber!=encryptObjNum){
+		// Contents in the Signature Dictionary should not be decrypted
+		if(encrypted && refInRef->notEncrypted==false){
 			// decryption of strings
 			void* elementValue;
 			int elementType;
 			unsigned char* elementKey;
+			bool isSigDict=false;
+			unsigned char* DictName;
 			switch(*objType){
 			case Type::String:
-				if(encryptObj->DecryptString((uchar*)(*object), objNumber, genNumber)){
-					cout << "Decryption of string finished" << endl;
+				if(encryptObj->DecryptString((PDFStr*)(*object), objNumber, genNumber)){
+					Log(LOG_DEBUG, "Decryption of a String finished");
+				}else{
+					Log(LOG_ERROR, "Failed in decrypting a String"); return false;
 				}
 				break;
 			case Type::Array:
 				for(i=0; i<((Array*)(*object))->getSize(); i++){
 					if(((Array*)(*object))->Read(i, &elementValue, &elementType)){
 						if(elementType==Type::String){
-							if(encryptObj->DecryptString((uchar*)elementValue, objNumber, genNumber)){
-								cout << "Decryption of string in array" << endl;
+							if(encryptObj->DecryptString((PDFStr*)elementValue, objNumber, genNumber)){
+								Log(LOG_DEBUG, "Decryption of a String in an Array finished");
 							}else{
-								cout << "Error in decryption" << endl;
-								return false;
+								Log(LOG_ERROR, "Failed in decrypting a String in an Array"); return false;
 							}
 						}
 					}else{
-						cout << "Error in reading an array" << endl;
+						Log(LOG_ERROR, "Failed in reading an Array"); return false;
 					}
 				}
 				break;
 			case Type::Dict:
+				if(((Dictionary*)(*object))->Search("Type")>=0 && ((Dictionary*)(*object))->Read("Type", (void**)&DictName, Type::Name)){
+					if(unsignedstrcmp(DictName, "Sig")){
+						Log(LOG_DEBUG, "The Dictionary is a Signature Dictionary");
+						isSigDict=true;
+					}
+				}
 				for(i=0; i<((Dictionary*)(*object))->getSize(); i++){
 					if(((Dictionary*)(*object))->Read(i, &elementKey, &elementValue, &elementType)){
-						if(elementType==Type::String){
-							if(encryptObj->DecryptString((uchar*)elementValue, objNumber, genNumber)){
-								cout << "Decryption of string in dict" << endl;
+						if(elementType==Type::String && !unsignedstrcmp(elementKey, "Contents")){
+							if(encryptObj->DecryptString((PDFStr*)elementValue, objNumber, genNumber)){
+								Log(LOG_DEBUG, "Decryption of a String in a Dictionary finished");
 							}else{
-								cout << "Error in decryption" << endl;
-								return false;
+								Log(LOG_ERROR, "Failed in decrypting a String in a Dictionary"); return false;
 							}
 						}
 					}else{
-						cout << "Error in reading a dict" << endl;
+						Log(LOG_ERROR, "Failed in reading a Dictionary"); return false;
 					}
 				}
 				break;
 			case Type::Stream:
 				if(!encryptObj->DecryptStream((Stream*)*object)){
-					cout << "Error in decrypting stream" << endl;
-					return false;
+					Log(LOG_ERROR, "Failed in deryptiong a Stream"); return false;
 				}
-				cout << "Decryption of stream finished" << endl;
+				Log(LOG_DEBUG, "Decrption of a Stream finished");
 			}
 		}
 		if(*objType==Type::Stream){
 			((Stream*)(*object))->Decode();
-			}*/
+		}
 		Log(LOG_DEBUG, "ReadRefObj finished");
 	}
 	refInRef->position=-1;
@@ -623,6 +622,20 @@ bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type){
 		return false;
 	}
 	return false;
+}
+
+bool PDFParser::AuthUser(char* pwd){
+	int pwdLen=strlen(pwd);
+	PDFStr* pwdStr=new PDFStr(pwdLen);
+  unsignedstrcpy(pwdStr->decrData, (unsigned char*)pwd);
+	return encryptObj->AuthUser(pwdStr);
+}
+
+bool PDFParser::AuthOwner(char* pwd){
+	int pwdLen=strlen(pwd);
+	PDFStr* pwdStr=new PDFStr(pwdLen);
+  unsignedstrcpy(pwdStr->decrData, (unsigned char*)pwd);
+	return encryptObj->AuthOwner(pwdStr);
 }
 
 bool PDFParser::HasError(){
@@ -1068,6 +1081,10 @@ int PDFParser::readXRef(int position){
 		if(!readStream(&XRefStm)){
 			return -1;
 		}
+		// Set notEncrypted flag in Reference
+		int XRefStm_objNumber=XRefStm.objNumber;
+		Reference[XRefStm_objNumber]->notEncrypted=true;
+		
 		if(LOG_LEVEL>=LOG_DEBUG){
 			Log(LOG_DEBUG, "Stream dictionary:");
 			XRefStm.StmDict.Print();
