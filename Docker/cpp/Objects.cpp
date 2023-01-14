@@ -206,11 +206,11 @@ void Array::Print(int indent){
 	}
 }
 
-int Dictionary::getSize(){
+int Dictionary::GetSize(){
 	return values.size();
 }
 
-int Array::getSize(){
+int Array::GetSize(){
 	return values.size();
 }
 
@@ -355,7 +355,7 @@ bool Stream::Decode(){
 	if(filtersType==Type::Array){
 		Array* filterArray=(Array*)filtersValue;
 		Array* parmsArray=(Array*)parmsValue;
-		int filterSize=filterArray->getSize();
+		int filterSize=filterArray->GetSize();
 		for(i=0; i<filterSize; i++){
 			// prepare filter
 			Log(LOG_DEBUG, "Filter #%d\n", i);
@@ -922,4 +922,18 @@ void DumpPDFStr(PDFStr* str){
 		printf("%02x ", str->decrData[i]);
 	}
 	cout << endl;
+}
+
+// return true if a>=b, false if a<b
+bool CompareVersions(PDFVersion a, PDFVersion b){
+	if(a.major>b.major){
+		return true;
+	}else if(a.major<b.major){
+		return false;
+	}
+	if(a.minor>=b.minor){
+		return true;
+	}else{
+		return false;
+	}
 }

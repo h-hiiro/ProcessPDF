@@ -176,7 +176,7 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 				error=true;
 				return;
 			}
-			Log(LOG_INFO, "CF has %d entries", CF->getSize());
+			Log(LOG_INFO, "CF has %d entries", CF->GetSize());
 			if(LOG_LEVEL>=LOG_DEBUG){
 				Log(LOG_DEBUG, "CF dictionary:");
 				CF->Print();
@@ -336,120 +336,91 @@ Encryption::Encryption(Dictionary* encrypt, Array* ID):
 			printf("ID[%d]: ", i);
 			DumpPDFStr(IDs[i]);
 		}
-	}
+	}	
+}
+bool Encryption::IsAuthenticated(){
+	return FEKObtained;
+}
 
-	/*
-	// Authentication test (user)
-	cout << "Trial user authentication with no password" << endl;
-	if(!AuthUser()){
-		cout << "User authentication with no password failed" << endl;
-		cout << "Enter user password" << endl;
-		uchar* pwd_input=GetPassword();
-		AuthUser(pwd_input);
-	}
-
-	// Authentication test (owner)
-	cout << "Trial owner authentication with no password" << endl;
-	if(!AuthOwner()){
-		cout << "Owner authentication with no password failed" << endl;
-		cout << "Enter owner password; enter something arbitrary to skip" << endl;
-		uchar* pwd_input_o=GetPassword();
-		if(pwd_input_o->length>0){
-			AuthOwner(pwd_input_o);
-		}else{
-			cout << "Owner authentication skipped" << endl;
-		}
-	}
-	
+bool Encryption::getPerms6(){	
 	if(R==6 && FEKObtained){
 		// decrypt Perms
+		Log(LOG_INFO, "Decrypt Perms in R=6");
 		int aescount;
 		int result;
 		EVP_CIPHER_CTX *aesctx=EVP_CIPHER_CTX_new();
 		unsigned char iv[16];
-		uchar* Perms_decoded=new uchar();
-		Perms_decoded->data=new unsigned char[16];
+		PDFStr* Perms_decoded=new PDFStr(16);
+		int i, j;
 		for(i=0; i<16; i++){
 			iv[i]='\0';
 		}
-		result=EVP_DecryptInit_ex2(aesctx, EVP_aes_256_cbc(), &(FEK->data[0]), &iv[0], NULL);
+		result=EVP_DecryptInit_ex2(aesctx, EVP_aes_256_cbc(), &(FEK->decrData[0]), &iv[0], NULL);
 		if(result!=1){
-			cout << "EVP_DecryptInit failed " << endl;
-			error=true;
-			return;
+			Log(LOG_ERROR, "EVP_DecryptInit failed"); return false;
 		}
 		result=EVP_CIPHER_CTX_set_padding(aesctx, 0);
 		if(result!=1){
-			cout << "EVP_CIPHER_CTX_set_padding failed" << endl;
-			error=true;
-			return;
+			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_padding failed"); return false;
 		}
-		result=EVP_DecryptUpdate(aesctx, &(Perms_decoded->data[0]), &aescount, &(Perms->data[0]), 16);
+		result=EVP_DecryptUpdate(aesctx, &(Perms_decoded->decrData[0]), &aescount, &(Perms->decrData[0]), 16);
 		if(result!=1){
-			cout << "EVP_DecryptUpdate failed" << endl;
-		  error=true;
-			return;
+			Log(LOG_ERROR, "EVP_DecryptUpdate failed"); return false;
 		}
 		int aesfinalCount;
-		result=EVP_DecryptFinal_ex(aesctx, &(Perms_decoded->data[aescount]), &aesfinalCount);
+		result=EVP_DecryptFinal_ex(aesctx, &(Perms_decoded->decrData[aescount]), &aesfinalCount);
 		if(result!=1){
-			cout << "EVP_DecryptFinal failed" << endl;
-			ERR_print_errors_fp(stderr);
-			error=true;
-			return;
+			Log(LOG_ERROR, "EVP_DecryptFinal failed"); return false;
 		}
 		aescount+=aesfinalCount;
 
 		bool P2[32];
 		for(i=0; i<4; i++){
 			for(j=0; j<8; j++){
-				P2[i*8+j]=((Perms_decoded->data[i])>>(j))&1==1 ? true: false;
+				P2[i*8+j]=((Perms_decoded->decrData[i])>>(j))&1==1 ? true: false;
 			}
 		}
-		
-		cout << "Decoded Perms: ";
-		for(i=0; i<32; i++){
-			printf("%01d", P2[i]?1:0);
+		// Permission check
+		if(LOG_LEVEL>=LOG_DEBUG){
+			Log(LOG_DEBUG, "Decoded Perms:");
+			for(i=0; i<32; i++){
+				printf("%01d", P2[i]?1:0);
+			}
+			cout << endl;
 		}
-		cout << endl;
 		for(i=0; i<32; i++){
 			if(P2[i]!=P[i]){
-				cout << "Mismatch found in Ps" << endl;
-				error=true;
-				return;
+				Log(LOG_ERROR, "Mismatch found in Ps"); return false;
 			}
 		}
-		if(Perms_decoded->data[8]=='T'){
+		Log(LOG_INFO, "P ok");
+		// EncryptMetadata check
+		if(Perms_decoded->decrData[8]=='T'){
 			if(encryptMeta){
 				// ok
 			}else{
-				cout << "Mismatch found in encryptMeta" << endl;
-				error=true;
-				return;
+				// mismatch
+				Log(LOG_ERROR, "Mismatch found in encryptMeta"); return false;
 			}
-		}else if(Perms_decoded->data[8]=='F'){
+		}else if(Perms_decoded->decrData[8]=='F'){
 			if(!encryptMeta){
 				// ok
 			}else{
-				cout << "Mismatch found in encryptMeta" << endl;
-				error=true;
-				return;
+				// mismatch
+				Log(LOG_ERROR, "Mismatch found in encryptMeta"); return false;
 			}
 		}else{
-			cout << "EncryptMetadata not ok" << endl;
-			error=true;
-			return;
+			Log(LOG_ERROR, "EncryptMetadata not ok"); return false;
 		}
-		cout << "EncryptMetadata ok" << endl;
-		if(Perms_decoded->data[9]=='a' && Perms_decoded->data[10]=='d' && Perms_decoded->data[11]=='b'){
-			cout << "'adb' ok" << endl;
+		Log(LOG_INFO, "EncryptMetadata ok");
+		// 'adb'
+		if(Perms_decoded->decrData[9]=='a' && Perms_decoded->decrData[10]=='d' && Perms_decoded->decrData[11]=='b'){
+			Log(LOG_INFO, "'adb' ok");
 		}else{
-			cout << "'adb' not ok " << endl;
-			error=true;
-			return;
+			Log(LOG_ERROR, "'adb' not ok "); return false;
 		}
-		}*/
-		
+	}
+	return true;
 }
 
 bool Encryption::DecryptString(PDFStr* str, int objNumber, int genNumber){
@@ -1098,7 +1069,13 @@ bool Encryption::AuthOwner(PDFStr* pwd){
 			Log(LOG_DEBUG, "FEK:");
 			DumpPDFStr(FEK);
 		}
+		bool isFirstAuth=!FEKObtained;
 		FEKObtained=true;
+		if(isFirstAuth){
+			if(getPerms6()==false){
+				error=true;
+			}
+		}
 		return true;
 	}
 	Log(LOG_ERROR, "%d is invalid as R", R);
@@ -1163,7 +1140,13 @@ bool Encryption::AuthUser(PDFStr* pwd){
 			Log(LOG_DEBUG, "FEK:");
 			DumpPDFStr(FEK);
 		}
+		bool isFirstAuth=!FEKObtained;
 		FEKObtained=true;
+		if(isFirstAuth){
+			if(getPerms6()==false){
+				error=true;
+			}
+		}
 		return true;
 	}
 	Log(LOG_ERROR, "%d is invalid as R", R); return false;
@@ -2011,33 +1994,6 @@ void Encryption::EncryptO(unsigned char* paddedUserPwd, uchar* RC4fek){
 		O->data[rc4count]='\0';
 		O->length=rc4count;
 	}
-}
-
-
-
-uchar* Encryption::GetPassword(){
-	char pwd[64];
-	struct termios term;
-	struct termios save;
-	tcgetattr(STDIN_FILENO, &term);
-	save=term;
-	// turn off echo
-	term.c_lflag &= ~ECHO;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term);
-	// password
-	cin >> pwd;
-	// turn off echo
-	tcsetattr(STDIN_FILENO, TCSANOW, &save);
-
-	uchar* pwdObj=new uchar();
-	pwdObj->data=new unsigned char[strlen(pwd)+1];
-	int i;
-	for(i=0; i<strlen(pwd); i++){
-		pwdObj->data[i]=pwd[i];
-	}
-	pwdObj->data[strlen(pwd)]='\0';
-	pwdObj->length=strlen(pwd);
-	return pwdObj;
 }
 
 void Encryption::prepareIV(unsigned char* iv){

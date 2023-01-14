@@ -126,9 +126,58 @@ int main(int argc, char** argv){
 			}else{
 				Log(LOG_WARN, "Owner password (blank) is NOT ok");
 			}
-			
+		}
+		if(PP.IsAuthenticated()==false){
+			Log(LOG_ERROR, "Authentication failed");
+			return -1;
+		}else{
+			Log(LOG_INFO, "Authentication ok");
 		}
 	}
-		
+
+	// Version in Document catalog dictionary
+	if(!PP.ReadVersion()){
+		return -1;
+	}
+
+	// Pages
+	if(!PP.ReadPages()){
+		return -1;
+	}
+	// Page information
+	int i, j;
+	if(LOG_LEVEL>=LOG_INFO){
+		Log(LOG_INFO, "Pages information");
+		Array* MediaBox;
+		void* ContentsValue;
+		Stream* Contents;
+		int ContentsType;
+		int numPages=PP.GetPageSize();
+		for(i=0; i<numPages; i++){
+			if(PP.ReadPageDict(i, "MediaBox", (void**)&MediaBox, Type::Array, true)){
+				Log(LOG_INFO, "Page %d MediaBox:", i);
+				MediaBox->Print();
+			}
+			if(PP.ReadPageDict(i, "Contents", (void**)&ContentsValue, &ContentsType, false)){
+				if(ContentsType==Type::Array){
+					int ContentsSize=((Array*)ContentsValue)->GetSize();
+					for(j=0; j<ContentsSize; j++){
+						if(PP.Read((Array*)ContentsValue, j, (void**)&Contents, Type::Array)){
+							Log(LOG_INFO, "Page %d Contents %d:", i, j);
+							printf("%s", Contents->decoData);
+						}
+					}
+				}else if(ContentsType==Type::Stream){
+					Log(LOG_INFO, "Page %d Contents:", i, j);
+					printf("%s", ((Stream*)ContentsValue)->decoData);
+				}else{
+					Log(LOG_ERROR, "Invalid Contents, %d", ContentsType);
+					return -1;
+				}
+			}
+		}
+	}
+
+	
 	return 0;
 }

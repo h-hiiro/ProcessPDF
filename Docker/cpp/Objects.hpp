@@ -58,7 +58,7 @@ public:
 	bool Read(const char* key, void** value, int type);
 	bool Read(int index, unsigned char** key, void** value, int* type);
 	void Merge(Dictionary dict2);
-	int getSize();
+	int GetSize();
 	void Delete(int index);
 	bool Update(unsigned char* key, void* value, int type);
 };
@@ -73,7 +73,7 @@ public:
 	void Append(void* value, int type);
 	void Print();
 	void Print(int indent);
-	int getSize();
+	int GetSize();
 	bool Read(int index, void** value, int* type);
 	bool Read(int index, void** value, int type);
 };
@@ -134,6 +134,20 @@ public:
 	int objNumber;
 };
 
+class PDFVersion{
+private:
+	bool error;
+	bool valid;
+public:
+	int major;
+	int minor;
+	PDFVersion();
+	bool set(char* label);
+	bool isValid();
+	void print();
+	char v[4];
+};
+
 
 char* printObj(void* value, int type);
 
@@ -153,16 +167,4 @@ PDFStr* dateString();
 
 void DumpPDFStr(PDFStr* str);
 
-class PDFVersion{
-private:
-	int major;
-	int minor;
-	bool error;
-	bool valid;
-public:
-	PDFVersion();
-	bool set(char* label);
-	bool isValid();
-	void print();
-	char v[4];
-};
+bool CompareVersions(PDFVersion a, PDFVersion b);

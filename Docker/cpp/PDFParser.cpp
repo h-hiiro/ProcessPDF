@@ -157,14 +157,14 @@ PDFParser::PDFParser(char* fileName):
 	}else{
 		Log(LOG_INFO, "This document is not encrypted");
 	}
+}
 
-	/*
-	// find /Version in Document catalog dictrionary
-	// The procedure fails when the Document Catalog Dictionary is in an encrypted object stream
+// Read Version in Document catalog dictionary
+bool PDFParser::ReadVersion(){
 	Log(LOG_INFO, "Try to find /Version in Document catalog dictionary");
 	Dictionary* dCatalog;
 	if(trailer.Search("Root")<0){
-		Log(LOG_ERROR, "Root not found in the trailer"); error=true; return;
+		Log(LOG_ERROR, "Root not found in the trailer"); error=true; return false;
 	}
 	if(Read(&trailer, "Root", (void**)&dCatalog, Type::Dict)){
 	  char* version;
@@ -172,8 +172,16 @@ PDFParser::PDFParser(char* fileName):
 			if(dCatalog->Read("Version", (void**)&version, Type::Name)){
 				v_catalog.set(version);
 				Log(LOG_INFO, "Version in document catalog dictionary is %s", v_catalog.v);
+				if(CompareVersions(v_catalog, v_header)){
+					// catalog>=header
+					v_document.set(v_catalog.v);
+				}else{
+					// catalog<header
+					v_document.set(v_header.v);
+				}
+				Log(LOG_INFO, "Finally determined version is %s", v_document.v);
 			}else{
-				Log(LOG_ERROR, "Failed in reading Version"); error=true; return;
+				Log(LOG_ERROR, "Failed in reading Version"); error=true; return false;
 			}
 		}else{
 			Log(LOG_INFO, "No version information in document catalog dictionary");
@@ -181,138 +189,111 @@ PDFParser::PDFParser(char* fileName):
 	}else{
 		Log(LOG_WARN, "Failed in reading Document catalog dictionary");
 	}
-
-	
-	cout << "Read page information" << endl;
-	// construct Pages array
-	Indirect* rootPagesRef;
-	Dictionary* rootPages;
-	void* rootPagesValue;
-	int rootPagesType;
-	if(dCatalog->Read((unsigned char*)"Pages", (void**)&rootPagesValue, &rootPagesType) && rootPagesType==Type::Indirect){
-		rootPagesRef=(Indirect*)rootPagesValue;
-		if(readRefObj(rootPagesRef, (void**)&rootPagesValue, &rootPagesType) && rootPagesType==Type::Dict){
-			rootPages=(Dictionary*)rootPagesValue;
-			// rootPages->Print();
-		}else{
-			cout << "Error in read rootPages reference" << endl;
-			error=true;
-			return;
-		}
-	}else{
-		cout << "Error in Pages" << endl;
-		error=true;
-		return;
-	}
-	void* totalPagesValue;
-	int totalPages;
-	int totalPagesType;
-	if(rootPages->Read((unsigned char*)"Count", (void**)&totalPagesValue, &totalPagesType) && totalPagesType==Type::Int){
-		totalPages=*((int*)totalPagesValue);
-		printf("Total pages: %d\n", totalPages);
-	}else{
-		cout << "Error in read count in rootPages" << endl;
-		error=true;
-		return;
-	}
-	Pages=new Page*[totalPages];
-	PagesSize=totalPages;
-	int pageCount=0;
-	if(!investigatePages(rootPagesRef, &pageCount)){
-		error=true;
-		return;
-		}*/
-}
-		
-/*
-bool PDFParser::investigatePages(Indirect* pagesRef, int* pageCount){
-	void* pagesValue;
-	int pagesType;
-	Dictionary* pages;
-	if(readRefObj(pagesRef, (void**)&pagesValue, &pagesType) && pagesType==Type::Dict){
-		pages=(Dictionary*)pagesValue;
-	}else{
-		cout << "Error in read pages reference" << endl;
-		return false;
-	}
-	
-	void* kidsValue;
-	int kidsType;
-	Array* kids;
-	if(pages->Read((unsigned char*)"Kids", (void**)&kidsValue, &kidsType) && kidsType==Type::Array){
-		kids=(Array*)kidsValue;
-		int kidsSize=kids->getSize();
-		void* kidValue;
-		int kidType;
-		Indirect* kidRef;
-		Dictionary* kid;
-		int i;
-		for(i=0; i<kidsSize; i++){
-			// printf("KID %d\n", i);
-			if(kids->Read(i, (void**)&kidValue, &kidType) && kidType==Type::Indirect){
-				kidRef=(Indirect*)kidValue;
-				if(readRefObj(kidRef, (void**)&kidValue, &kidType) && kidType==Type::Dict){
-					kid=(Dictionary*)kidValue;
-					// kid->Print();
-					void* kidTypeValue;
-					unsigned char* kidType;
-					int kidTypeType;
-					if(kid->Read((unsigned char*)"Type", (void**)&kidTypeValue, &kidTypeType) && kidTypeType==Type::Name){
-						kidType=(unsigned char*)kidTypeValue;
-						if(unsignedstrcmp(kidType, (unsigned char*)"Page")){
-							// cout << "Page" << endl;
-							Pages[*pageCount]=new Page();
-							Pages[*pageCount]->Parent=pagesRef;
-							Pages[*pageCount]->PageDict=kid;
-							Pages[*pageCount]->objNumber=kidRef->objNumber;
-							*pageCount=*pageCount+1;
-						}else if(unsignedstrcmp(kidType, (unsigned char*)"Pages")){
-							// cout << "Pages" << endl;
-							if(!investigatePages(kidRef, pageCount)){
-								return false;
-							}
-						}
-					}
-				}else{
-					cout << "Error in read kid" << endl;
-					return false;
-				}
-			}else{
-				cout << "Error in read kid reference" << endl;
-				return false;
-			}
-		}
-	}else{
-		cout << "Error in read Kids" << endl;
-		return false;
-	}
-
-	
 	return true;
 }
 
+// Read Page information
+bool PDFParser::ReadPages(){
+	Log(LOG_INFO, "Read page information");
+	Dictionary* dCatalog;
+	if(trailer.Search("Root")<0){
+		Log(LOG_ERROR, "Root not found in the trailer"); error=true; return false;
+	}
+	if(Read(&trailer, "Root", (void**)&dCatalog, Type::Dict)){
+		// ok
+	}else{
+		Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
+	}
+	// construct Pages array
+	Dictionary* rootPages;
+	Indirect* rootPagesRef;
+	if(dCatalog->Read("Pages", (void**)&rootPagesRef, Type::Indirect) &&
+		 Read(dCatalog, "Pages", (void**)&rootPages, Type::Dict)){
+		// ok
+	}else{
+		Log(LOG_ERROR, "Failed in reading Pages"); error=true; return false;
+	}
+	int* totalPages=new int();
+	if(rootPages->Read("Count", (void**)&totalPages, Type::Int)){
+		Log(LOG_INFO, "Total pages: %d", *totalPages);
+	}else{
+		Log(LOG_ERROR, "Failed in reading Count in rootPages"); error=true; return false;
+	}
+	Pages=new Page*[*totalPages];
+	PagesSize=*totalPages;
+	int pageCount=0;
+	if(!investigatePages(rootPagesRef, rootPages, &pageCount)){
+		error=true;
+		return false;
+	}
+	return true;
+}
 
-bool PDFParser::readPage(int index, unsigned char* key, void** value, int* type, bool inheritable){
+bool PDFParser::investigatePages(Indirect* pagesRef, Dictionary* pages, int* pageCount){  
+	Array* kids;
+	if(pages->Read("Kids", (void**)&kids, Type::Array)){
+		int kidsSize=kids->GetSize();
+		Dictionary* kid;
+		Indirect* kidRef;
+		int i;
+		for(i=0; i<kidsSize; i++){
+			if(kids->Read(i, (void**)&kidRef, Type::Indirect) &&
+				 Read(kids, i, (void**)&kid, Type::Dict)){
+				unsigned char* kidType;
+				if(kid->Read("Type", (void**)&kidType, Type::Name)){
+					if(unsignedstrcmp(kidType, "Page")){
+						Pages[*pageCount]=new Page();
+						Pages[*pageCount]->Parent=pagesRef;
+						Pages[*pageCount]->PageDict=kid;
+						Pages[*pageCount]->objNumber=kidRef->objNumber;
+						*pageCount=*pageCount+1;
+					}else if(unsignedstrcmp(kidType, "Pages")){
+						if(!investigatePages(kidRef, kid, pageCount)){
+							return false;
+						}
+					}
+				}
+			}else{
+				Log(LOG_ERROR, "Failed in reading a kid"); return false;
+			}
+		}
+	}else{
+		Log(LOG_ERROR, "Failed in reading Kids"); return false;
+	}
+	return true;
+}
+int PDFParser::GetPageSize(){
+	return PagesSize;
+}
+
+bool PDFParser::ReadPageDict(int index, const char* key, void** value, int type, bool inheritable){
+	int readType;
+	if(ReadPageDict(index, key, value, &readType, inheritable)){
+		if(readType==type){
+			return true;
+		}else{
+			Log(LOG_ERROR, "Type mismatch in ReadPageDict");
+		}
+	}
+	return false;
+}
+bool PDFParser::ReadPageDict(int index, const char* key, void** value, int* type, bool inheritable){
 	Page* page=Pages[index];
 	if(page->PageDict->Search(key)<0){
 		// key not found
 		if(inheritable){
 			Indirect* parentRef=page->Parent;
-			void* parentValue;
-			int parentType;
 			Dictionary* parent;
 			while(true){
-				if(readRefObj(parentRef, (void**)&parentValue, &parentType) && parentType==Type::Dict){
-					parent=(Dictionary*)parentValue;
-					// parent->Print();
+				if(ReadRefObj(parentRef, (void**)&parent, Type::Dict)){
 					if(parent->Search(key)>=0){
-						parent->Read(key, value, type);
+						return Read(parent, key, value, type);
 						return true;
 					}
-					if(parent->Read((unsigned char*)"Parent", (void**)&parentValue, &parentType) && parentType==Type::Indirect){
-						parentRef=(Indirect*)parentValue;
+					if(parent->Read("Parent", (void**)&parentRef, Type::Indirect)){
+						// ok
 					}else{
-						// cout << "Parent not found" << endl;
+						// parent not found
 						return false;
 					}
 				}
@@ -321,12 +302,9 @@ bool PDFParser::readPage(int index, unsigned char* key, void** value, int* type,
 			return false;
 		}
 	}else{
-		page->PageDict->Read(key, value, type);
-		return true;
+		return Read(page->PageDict, key, value, type);
 	}
 }
-
-*/
 
 bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 	int i;
@@ -544,7 +522,7 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 				}
 				break;
 			case Type::Array:
-				for(i=0; i<((Array*)(*object))->getSize(); i++){
+				for(i=0; i<((Array*)(*object))->GetSize(); i++){
 					if(((Array*)(*object))->Read(i, &elementValue, &elementType)){
 						if(elementType==Type::String){
 							if(encryptObj->DecryptString((PDFStr*)elementValue, objNumber, genNumber)){
@@ -565,7 +543,7 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 						isSigDict=true;
 					}
 				}
-				for(i=0; i<((Dictionary*)(*object))->getSize(); i++){
+				for(i=0; i<((Dictionary*)(*object))->GetSize(); i++){
 					if(((Dictionary*)(*object))->Read(i, &elementKey, &elementValue, &elementType)){
 						if(elementType==Type::String && !unsignedstrcmp(elementKey, "Contents")){
 							if(encryptObj->DecryptString((PDFStr*)elementValue, objNumber, genNumber)){
@@ -598,14 +576,55 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 }
 bool PDFParser::ReadRefObj(Indirect* ref, void** object, int objType){
 	int readType;
-	return ReadRefObj(ref, object, &readType) && readType==objType;
+	if(ReadRefObj(ref, object, &readType)){
+		if(readType==objType){
+			return true;
+		}else{
+			Log(LOG_ERROR, "Type mismatch in ReadRefObj");
+		}
+	}
+	return false;
 }
 
 
 bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type){
+	int readType;
+	if(Read(dict, key, value, &readType)){
+		if(readType==type){
+			return true;
+		}else{
+			Log(LOG_ERROR, "Type mismatch in PDFParser::Read");
+		}
+	}
+	return false;
+}
+
+bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int* type){
 	void* readValue;
 	int readType;
 	if(dict->Read(key, (void**)&readValue, &readType)){
+		if(readType==Type::Indirect){
+			Indirect* readRef=(Indirect*) readValue;
+			if(ReadRefObj(readRef, (void**)&readValue, type)){
+				*value=readValue;
+				return true;		
+			}else{
+				return false;
+			}
+		}else{
+			*type=readType;
+			*value=readValue;
+			return true;
+		}
+	}
+	return false;
+}
+
+
+bool PDFParser::Read(Array* array, int index, void** value, int type){
+	void* readValue;
+	int readType;
+	if(array->Read(index, (void**)&readValue, &readType)){
 		if(readType==Type::Indirect){
 			Indirect* readRef=(Indirect*) readValue;
 			if(ReadRefObj(readRef, (void**)&readValue, type)){
@@ -623,7 +642,7 @@ bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type){
 	}
 	return false;
 }
-
+ 
 bool PDFParser::AuthUser(char* pwd){
 	int pwdLen=strlen(pwd);
 	PDFStr* pwdStr=new PDFStr(pwdLen);
@@ -644,6 +663,14 @@ bool PDFParser::HasError(){
 
 bool PDFParser::IsEncrypted(){
 	return encrypted;
+}
+
+bool PDFParser::IsAuthenticated(){
+	if(encrypted){
+		return encryptObj->IsAuthenticated();
+	}else{
+		return true;
+	}
 }
 
 bool PDFParser::isSpace(char a){
@@ -1126,7 +1153,7 @@ int PDFParser::readXRef(int position){
 		Array* IndexArray;
 		if(XRefStm.StmDict.Search("Index")>=0){
 			if(XRefStm.StmDict.Read("Index", (void**)&IndexArray, Type::Array)){
-				int IndexArraySize=IndexArray->getSize();
+				int IndexArraySize=IndexArray->GetSize();
 				if(IndexArraySize%2!=0){
 					Log(LOG_ERROR, "The Index array contains odd number of elements");
 					return -1;
@@ -1857,19 +1884,19 @@ bool PDFParser::readStream(Stream* stm, bool outputError){
 		}
 	}
 	if(isNotStream){
-		Log(outputError?LOG_ERROR:LOG_WARN, "Invalid character in the stream line");
+		Log(outputError?LOG_ERROR:LOG_DEBUG, "Invalid character in the stream line");
 		return false;
 	}
 	// here, EOL should be CRLF or LF, not including CR
 	file.get(a);
 	if(!isEOL(a)){
-		Log(outputError?LOG_ERROR:LOG_WARN, "Invalid character in the stream line");
+		Log(outputError?LOG_ERROR:LOG_DEBUG, "Invalid character in the stream line");
 		return false;
 	}
 	if(a==CR){
 		file.get(a);
 		if(a!=LF){
-			Log(outputError?LOG_ERROR:LOG_WARN, "Invalid EOL in the stream line");
+			Log(outputError?LOG_ERROR:LOG_DEBUG, "Invalid EOL in the stream line");
 			return false;
 		}
 	}

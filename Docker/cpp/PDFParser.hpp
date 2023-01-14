@@ -36,6 +36,7 @@ private:
 	int lastXRef;
 	PDFVersion v_header;
 	PDFVersion v_catalog;
+	PDFVersion v_document;
 	bool findHeader();
 	bool isSpace(char a);
 	bool isEOL(char a);
@@ -75,7 +76,7 @@ private:
 	bool readDict(Dictionary* dict);
 	bool readDict(Dictionary* dict, istream* is);
 	bool readStream(Stream* stm, bool outputError=true);
-	bool investigatePages(Indirect* pages, int* pageCount);
+	bool investigatePages(Indirect* pagesRef, Dictionary* pages, int* pageCount);
 	ifstream file;
 	Dictionary trailer;
 	Encryption* encryptObj; // for reading
@@ -91,9 +92,15 @@ public:
 	bool IsEncrypted();
 	bool ReadRefObj(Indirect* ref, void** object, int* objType);
 	bool ReadRefObj(Indirect* ref, void** object, int objType);
+	bool Read(Dictionary* dict, const char* key, void** value, int* type);
 	bool Read(Dictionary* dict, const char* key, void** value, int type);
+	bool Read(Array* array, int index, void** value, int type);
 	bool AuthUser(char* pwd);
 	bool AuthOwner(char* pwd);
-	
-	bool readPage(int index, unsigned char* key, void** value, int* type, bool inheritable);
+	int GetPageSize();
+	bool IsAuthenticated();
+	bool ReadVersion();
+	bool ReadPages();
+	bool ReadPageDict(int index, const char* key, void** value, int* type, bool inheritable);
+	bool ReadPageDict(int index, const char* key, void** value, int type, bool inheritable);
 };

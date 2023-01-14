@@ -43,6 +43,7 @@ private:
 	bool execDecryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
 	bool execEncryption(unsigned char** encrypted, int* elength, unsigned char** decrypted, int* length, unsigned char* CFM, int objNumber, int genNumber);
 	void prepareIV(unsigned char* iv);
+	bool getPerms6();
 public:
 	Encryption(Dictionary* encrypt, Array* ID);
 	Encryption();
@@ -53,14 +54,11 @@ public:
 	bool DecryptString(PDFStr* str, int objNumber, int genNumber);
 	bool EncryptStream(Stream* stm);
 	bool EncryptString(PDFStr* str, int objNumber, int genNumber);
-	PDFStr* GetPassword();
 	int getV();
 	void setV(int V_new);
 	void setCFM(char* CFM_new);
 	void setPwd(Array* ID, PDFStr* userPwd, PDFStr* ownerPwd);
 	void setP(bool* P_new);
 	Dictionary* exportDict();
-	bool aa(){
-		return FEKObtained;
-	}
+	bool IsAuthenticated();
 };
