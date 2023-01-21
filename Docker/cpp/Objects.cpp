@@ -304,6 +304,9 @@ int unsignedstrlen(unsigned char* a){
 	}
 }
 
+void unsignedstrcpy(unsigned char* dest, const char* data){
+	unsignedstrcpy(dest, (unsigned char*)data);
+}
 void unsignedstrcpy(unsigned char* dest, unsigned char* data){
 	int len=unsignedstrlen(data);
 	int i;

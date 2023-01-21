@@ -155,6 +155,7 @@ int unsignedstrlen(unsigned char* a);
 bool unsignedstrcmp(unsigned char* a, unsigned char* b);
 bool unsignedstrcmp(unsigned char* a, const char* b);
 void unsignedstrcpy(unsigned char* dest, unsigned char* data);
+void unsignedstrcpy(unsigned char* dest, const char* data);
 
 int decodeData(unsigned char* encoded, unsigned char* filter, Dictionary* parm, int encodedLength, unsigned char** decoded);
 int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, int decodedLength, unsigned char** encoded);

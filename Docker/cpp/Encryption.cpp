@@ -424,6 +424,7 @@ bool Encryption::getPerms6(){
 }
 
 bool Encryption::DecryptString(PDFStr* str, int objNumber, int genNumber){
+	Log(LOG_DEBUG, "DecryptString");
 	if(!FEKObtained){
 		Log(LOG_ERROR, "Not yet authenticated"); return false;
 	}
@@ -440,24 +441,30 @@ bool Encryption::DecryptString(PDFStr* str, int objNumber, int genNumber){
 	str->encrData[str->decrDataLen]='\0';
 	str->encrDataLen=str->decrDataLen;
 
-	if(unsignedstrcmp(StrF, Idn)){
-		// Identity filter: do nothing
-		str->decrypted=true;
-		return true;
-	}
-	// use StrF
-	Dictionary* filter;
-	if(CF->Read(StrF, (void**)&filter, Type::Dict)){
-		// OK
-	}else{
-		Log(LOG_ERROR, "Failed in reading StrF value"); return false;
-	}
-
 	unsigned char* CFM;
-	if(filter->Read("CFM", (void**)&CFM, Type::Name)){
-		// OK
+	if(V<4){
+		// StmF does not exist, CFM is "V2"
+		CFM=new unsigned char[3];
+		unsignedstrcpy(CFM, "V2");
 	}else{
-		Log(LOG_ERROR, "Failed in reading CFM"); return false;
+		if(unsignedstrcmp(StrF, Idn)){
+			// Identity filter: do nothing
+			str->decrypted=true;
+			return true;
+		}
+		// use StrF
+		Dictionary* filter;
+		if(CF->Read(StrF, (void**)&filter, Type::Dict)){
+			// OK
+		}else{
+			Log(LOG_ERROR, "Failed in reading StrF value"); return false;
+		}
+
+		if(filter->Read("CFM", (void**)&CFM, Type::Name)){
+			// OK
+		}else{
+			Log(LOG_ERROR, "Failed in reading CFM"); return false;
+		}
 	}
 
 	if(execDecryption(&(str->encrData), &(str->encrDataLen), &(str->decrData), &(str->decrDataLen), CFM, objNumber, genNumber)){
@@ -469,6 +476,7 @@ bool Encryption::DecryptString(PDFStr* str, int objNumber, int genNumber){
 }
 
 bool Encryption::DecryptStream(Stream* stm){
+	Log(LOG_DEBUG, "DecryptStream");
 	if(!FEKObtained){
 		Log(LOG_ERROR, "Not yet authenticated"); return false;
 	}
@@ -494,24 +502,30 @@ bool Encryption::DecryptStream(Stream* stm){
 	stm->encrData[stm->encoDataLen]='\0';
 	stm->encrDataLen=stm->encoDataLen;
 
-	if(unsignedstrcmp(StmF, Idn)){
-		// Identity filter: do nothing
-		stm->decrypted=true;
-		return true;
-	}
-	// use StmF
-	Dictionary* filter;
-	if(CF->Read(StmF, (void**)&filter, Type::Dict)){
-		// OK
-	}else{
-		Log(LOG_ERROR, "Failed in reading StmF"); return false;
-	}
-
 	unsigned char* CFM;
-	if(filter->Read("CFM", (void**)&CFM, Type::Name)){
-		// OK
+	if(V<4){
+		// StmF does not exist, CFM is "V2"
+		CFM=new unsigned char[3];
+		unsignedstrcpy(CFM, "V2");
 	}else{
-		Log(LOG_ERROR, "Failed in reading CFM");return false;
+		if(unsignedstrcmp(StmF, Idn)){
+			// Identity filter: do nothing
+			stm->decrypted=true;
+			return true;
+		}
+		// use StmF
+		Dictionary* filter;
+		if(CF->Read(StmF, (void**)&filter, Type::Dict)){
+			// OK
+		}else{
+			Log(LOG_ERROR, "Failed in reading StmF"); return false;
+		}
+
+		if(filter->Read("CFM", (void**)&CFM, Type::Name)){
+			// OK
+		}else{
+			Log(LOG_ERROR, "Failed in reading CFM");return false;
+		}
 	}
 
 	if(execDecryption(&(stm->encrData), &(stm->encrDataLen), &(stm->encoData), &(stm->encoDataLen), CFM, stm->objNumber, stm->genNumber)){
@@ -677,7 +691,7 @@ bool Encryption::execDecryption(unsigned char** encrypted, int* elength, unsigne
 		result=EVP_DigestFinal_ex(md5ctx, &hashed_md5[0], &count);
 		
 		// key
-		int key_length=max(Length_bytes+5, 16);
+		int key_length=min(Length_bytes+5, 16);
 		unsigned char key[key_length];
 		for(i=0; i<key_length; i++){
 			key[i]=hashed_md5[i];
@@ -687,14 +701,18 @@ bool Encryption::execDecryption(unsigned char** encrypted, int* elength, unsigne
 		int rc4count;
 		int rc4finalCount;
 		EVP_CIPHER_CTX *rc4ctx=EVP_CIPHER_CTX_new();
-		EVP_CIPHER* rc4=EVP_CIPHER_fetch(NULL, "RC4", "provider=legacy");
-		result=EVP_DecryptInit_ex2(rc4ctx, rc4, key, NULL, NULL);
+		result=EVP_DecryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_DecryptInit failed"); return false;
 		}
-		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, key_length*8);
+		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, key_length);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed");	return false;
+		}
+		Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
+		result=EVP_DecryptInit_ex2(rc4ctx, NULL, key, NULL, NULL);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_DecryptInit failed"); return false;
 		}
 		result=EVP_DecryptUpdate(rc4ctx, &((*decrypted)[0]), &rc4count, &((*encrypted)[0]), *elength);
 		if(result!=1){
@@ -1158,20 +1176,23 @@ PDFStr* Encryption::trialU(PDFStr* fek){
 	}
 	int i,j;
 	if(R==2){
-		// NEED TESTING !
 		// encrypt the PADDING with fek
 		int rc4count;
 		unsigned char encrypted_rc4[32];
 		EVP_CIPHER_CTX *rc4ctx=EVP_CIPHER_CTX_new();
-		EVP_CIPHER* rc4=EVP_CIPHER_fetch(NULL, "RC4", "provider=legacy");
 		int result;
-		result=EVP_EncryptInit_ex2(rc4ctx, rc4, fek->decrData, NULL, NULL);
+		result=EVP_EncryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
 		}
-		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length);
+		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
+		}
+		Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
+		result=EVP_EncryptInit_ex2(rc4ctx, NULL, fek->decrData, NULL, NULL);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
 		}
 		result=EVP_EncryptUpdate(rc4ctx, &encrypted_rc4[0], &rc4count, (unsigned char*)&PADDING[0], 32);
 		if(result!=1){
@@ -1216,14 +1237,18 @@ PDFStr* Encryption::trialU(PDFStr* fek){
 		int rc4count;
 		unsigned char encrypted_rc4[16];
 		EVP_CIPHER_CTX *rc4ctx=EVP_CIPHER_CTX_new();
-		EVP_CIPHER* rc4=EVP_CIPHER_fetch(NULL, "RC4", "provider=legacy");
-		result=EVP_EncryptInit_ex2(rc4ctx, rc4, fek->decrData, NULL, NULL);
+		result=EVP_EncryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
 		if(result!=1){
-			Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
+			Log(LOG_ERROR, "EVP_EncryptInit failed1"); return NULL;
 		}
-		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length);
+		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
+		}
+		Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
+		result=EVP_EncryptInit_ex2(rc4ctx, NULL, fek->decrData, NULL, NULL);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_EncryptInit failed2"); return NULL;
 		}
 		result=EVP_EncryptUpdate(rc4ctx, &encrypted_rc4[0], &rc4count, &hashed_md5[0], 16);
 		if(result!=1){
@@ -1256,15 +1281,20 @@ PDFStr* Encryption::trialU(PDFStr* fek){
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_CIPHER_CTX_reset failed"); return NULL;
 			}
-			result=EVP_EncryptInit_ex2(rc4ctx, rc4, &fek_i[0], NULL, NULL);
+			result=EVP_EncryptInit_ex2(rc4ctx, EVP_rc4(), &fek_i[0], NULL, NULL);
 			if(result!=1){
-				Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
+				Log(LOG_ERROR, "EVP_EncryptInit failed3"); return NULL;
 			}
-			result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length);
+			result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
 				return NULL;
 			}
+			result=EVP_EncryptInit_ex2(rc4ctx, NULL, &fek_i[0], NULL, NULL);
+			if(result!=1){
+				Log(LOG_ERROR, "EVP_EncryptInit failed4"); return NULL;
+			}
+			// Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
 			result=EVP_EncryptUpdate(rc4ctx, &encrypted_rc4[0], &rc4count, &unencrypted[0], 16);
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_EncryptUpdate failed"); return NULL;
@@ -1857,14 +1887,18 @@ PDFStr* Encryption::DecryptO(PDFStr* RC4fek){
 		int rc4count;
 		int rc4finalCount;
 		EVP_CIPHER_CTX *rc4ctx=EVP_CIPHER_CTX_new();
-		EVP_CIPHER* rc4=EVP_CIPHER_fetch(NULL, "RC4", "provider=legacy");
-		result=EVP_DecryptInit_ex2(rc4ctx, rc4, &RC4fek->decrData[0], NULL, NULL);
+		result=EVP_DecryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_DecryptInit failed"); return NULL;
 		}
-		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length);
+		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
 		if(result!=1){
 			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
+		}
+		Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
+		result=EVP_DecryptInit_ex2(rc4ctx, NULL, RC4fek->decrData, NULL, NULL);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
 		}
 		result=EVP_DecryptUpdate(rc4ctx, &unencrypted[0], &rc4count, &encrypted_rc4[0], 32);
 		if(result!=1){
@@ -1891,8 +1925,16 @@ PDFStr* Encryption::DecryptO(PDFStr* RC4fek){
 		int rc4count;
 		int rc4finalCount;
 		EVP_CIPHER_CTX *rc4ctx=EVP_CIPHER_CTX_new();
-		EVP_CIPHER* rc4=EVP_CIPHER_fetch(NULL, "RC4", "provider=legacy");
-		result=EVP_DecryptInit_ex2(rc4ctx, rc4, RC4fek->decrData, NULL, NULL);
+		result=EVP_DecryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
+		result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
+		}
+		Log(LOG_DEBUG, "Key length: %d", EVP_CIPHER_CTX_get_key_length(rc4ctx));
+		result=EVP_DecryptInit_ex2(rc4ctx, NULL, NULL, NULL, NULL);
+		if(result!=1){
+			Log(LOG_ERROR, "EVP_EncryptInit failed"); return NULL;
+		}
 		for(i=19; i>=0; i--){
 			unsigned char fek_i[Length_bytes];
 			for(j=0; j<32; j++){
@@ -1905,13 +1947,17 @@ PDFStr* Encryption::DecryptO(PDFStr* RC4fek){
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_CIPHER_CTX_reset failed"); return NULL;
 			}
-			result=EVP_DecryptInit_ex2(rc4ctx, rc4, &fek_i[0], NULL, NULL);
+			result=EVP_DecryptInit_ex2(rc4ctx, EVP_rc4(), NULL, NULL, NULL);
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_DecryptInit failed"); return NULL;
 			}
-			result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length);
+			result=EVP_CIPHER_CTX_set_key_length(rc4ctx, Length_bytes);
 			if(result!=1){
 				Log(LOG_ERROR, "EVP_CIPHER_CTX_set_key_length failed"); return NULL;
+			}
+			result=EVP_DecryptInit_ex2(rc4ctx, NULL, &fek_i[0], NULL, NULL);
+			if(result!=1){
+				Log(LOG_ERROR, "EVP_DecryptInit failed"); return NULL;
 			}
 			result=EVP_DecryptUpdate(rc4ctx, &unencrypted[0], &rc4count, &encrypted_rc4[0], 32);
 			if(result!=1){

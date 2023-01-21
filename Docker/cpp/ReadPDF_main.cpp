@@ -168,8 +168,10 @@ int main(int argc, char** argv){
 						}
 					}
 				}else if(ContentsType==Type::Stream){
-					Log(LOG_INFO, "Page %d Contents:", i, j);
-					printf("%s", ((Stream*)ContentsValue)->decoData);
+					if(LOG_LEVEL>=LOG_DEBUG){
+						Log(LOG_DEBUG, "Page %d Contents:", i, j);
+						printf("%s", ((Stream*)ContentsValue)->decoData);
+					}
 				}else{
 					Log(LOG_ERROR, "Invalid Contents, %d", ContentsType);
 					return -1;
