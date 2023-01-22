@@ -108,6 +108,9 @@ bool Dictionary::Read(int index, unsigned char** key, void** value, int* type){
 	return true;
 }
 
+void Dictionary::Append(const char* key, void* value, int type){
+	Append((unsigned char*)key, value, type);
+}
 
 void Dictionary::Append(unsigned char* key, void* value, int type){
 	// check whether the same key already exists
@@ -361,7 +364,7 @@ bool Stream::Decode(){
 		int filterSize=filterArray->GetSize();
 		for(i=0; i<filterSize; i++){
 			// prepare filter
-			Log(LOG_DEBUG, "Filter #%d\n", i);
+			Log(LOG_DEBUG, "Filter #%d", i);
 			if(!filterArray->Read(i, (void**)&filterName, Type::Name)){
 				Log(LOG_ERROR, "Failed in loading the filter");
 				return false;
@@ -421,34 +424,35 @@ bool Stream::Decode(){
 	return true;
 }
 
-/*
 bool Stream::Encode(){
+	Log(LOG_DEBUG, "Encode stream");
 	int filtersType;
 	void* filtersValue;
 	int i;
 	
-	if(!StmDict.Read((unsigned char*)"Filter", (void**)&filtersValue, &filtersType)){
+	if(!StmDict.Read("Filter", (void**)&filtersValue, &filtersType)){
 		// no filter
-		cout << "Stream with no Filter" << endl;
-		data=new unsigned char[dlength];
-		for(i=0; i<dlength; i++){
-			data[i]=decoded[i];
-			length=dlength;
+		Log(LOG_DEBUG, "Stream with no Filter");
+		encoData=new unsigned char[decoDataLen];
+		for(i=0; i<decoDataLen; i++){
+			encoData[i]=decoData[i];
 		}
+		encoDataLen=decoDataLen;
 		return true;
 	}
 
-	unsigned char* raw=new unsigned char[dlength];
-	for(i=0; i<dlength; i++){
-		raw[i]=decoded[i];
+	unsigned char* decoBuffer=new unsigned char[decoDataLen];
+	unsigned char* encoBuffer;
+	for(i=0; i<decoDataLen; i++){
+		decoBuffer[i]=decoData[i];
 	}
-	int decodedLength=dlength;
-	int encodedLength;
+	int decoBufLen=decoDataLen;
+	int encoBufLen;
 	
 	// get decode paramters
 	int parmsType;
 	void* parmsValue;
-	bool parmsExist=StmDict.Read((unsigned char*)"DecodeParms", (void**)&parmsValue, &parmsType);
+	bool parmsExist=StmDict.Read("DecodeParms", (void**)&parmsValue, &parmsType);
 
 	Dictionary* parmDict;
 	void* parmValue;
@@ -461,24 +465,19 @@ bool Stream::Encode(){
 	if(filtersType==Type::Array){
 		Array* filterArray=(Array*)filtersValue;
 		Array* parmsArray=(Array*)parmsValue;
-		int filterSize=filterArray->getSize();
+		int filterSize=filterArray->GetSize();
 		for(i=filterSize-1; i>=0; i--){
 			// prepare filter
-			printf("Filter #%d\n", i);
-			if(!filterArray->Read(i, (void**)&filterValue, &filterType)){
-				cout << "Filter load error" << endl;
+			Log(LOG_DEBUG, "Filter #%d", i);
+			if(!filterArray->Read(i, (void**)&filterName, Type::Name)){
+				Log(LOG_ERROR, "Failed in loading the filter");
 				return false;
 			}
-			if(filterType!=Type::Name){
-				cout << "Filter name error" << endl;
-				return false;
-			}
-			filterName=(unsigned char*)filterValue;
 
 			// prepare parm
 			if(parmsExist){
 				if(!parmsArray->Read(i, (void**)&parmValue, &parmType)){
-					cout << "DecodeParms load error" << endl;
+					Log(LOG_ERROR, "Failed in loading DecodeParm");
 					return false;
 				}
 			}else{
@@ -487,37 +486,46 @@ bool Stream::Encode(){
 			
 			if(parmType==Type::Dict){
 				parmDict=(Dictionary*)parmValue;
-				encodedLength=encodeData(raw, filterName, parmDict, decodedLength, &data);
+				encoBufLen=encodeData(decoBuffer, filterName, parmDict, decoBufLen, &encoBuffer);
 			}else if(parmType==Type::Null){
-				encodedLength=encodeData(raw, filterName, NULL, decodedLength, &data);
+				encoBufLen=encodeData(decoBuffer, filterName, NULL, decoBufLen, &encoBuffer);
+			}else{
+				Log(LOG_ERROR, "Invalid DecodeParm type");
+				return false;
+			}
+			if(encoBufLen==0){
+				return false;
 			}
 			// copy
-			raw=data;
-			decodedLength=encodedLength;
+			decoBuffer=encoBuffer;
+			decoBufLen=encoBufLen;
 		}
 	}else if(filtersType==Type::Name){
 		filterName=(unsigned char*)filtersValue;
 		if(parmsExist){
 			if(parmsType==Type::Dict){
 				parmDict=(Dictionary*)parmsValue;
-				encodedLength=encodeData(raw, filterName, parmDict, decodedLength, &data);
+				encoBufLen=encodeData(decoBuffer, filterName, parmDict, decoBufLen, &encoBuffer);
 			}else if(parmsType==Type::Null){
-				encodedLength=encodeData(raw, filterName, NULL, decodedLength, &data);
+				encoBufLen=encodeData(decoBuffer, filterName, NULL, decoBufLen, &encoBuffer);
 			}else{
-				cout << "Invalid Filter type" << endl;
+				Log(LOG_ERROR, "Invalid DecodeParm type");
 				return false;
 			}
 		}else{
-			encodedLength=encodeData(raw, filterName, NULL, decodedLength, &data);
+			encoBufLen=encodeData(decoBuffer, filterName, NULL, decoBufLen, &encoBuffer);
+		}
+		if(decoBufLen==0){
+			return false;
 		}
 	}else{
-		cout << "Invalid Filter value" << endl;
+		Log(LOG_ERROR, "Invalid Filter type");
 		return false;
 	}
-	length=encodedLength;
-
+	encoDataLen=encoBufLen;
+	encoData=encoBuffer;
 	return true;
-	}*/
+}
 
 bool unsignedstrcmp(unsigned char* a, unsigned char* b){
 	int alength=unsignedstrlen(a);
@@ -647,7 +655,7 @@ int decodeData(unsigned char* encoded, unsigned char* filter, Dictionary* parm, 
 }
 
 int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, int decodedLength, unsigned char** encoded){
-	printf("Filter: %s, decoded length: %d\n", filter, decodedLength);
+	Log(LOG_DEBUG, "Filter: %s, decoded length: %d", filter, decodedLength);
 
 	unsigned char inBuf[ZBUFSIZE];
 	unsigned char outBuf[ZBUFSIZE];
@@ -671,7 +679,7 @@ int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, 
 	cout << endl;*/
 	
 
-	if(unsignedstrcmp(filter, (unsigned char*)FLATE)){
+	if(unsignedstrcmp(filter, FLATE)){
 		// cout << "Flate" << endl;
 		if(parm!=NULL){
 			parm->Print();
@@ -683,7 +691,7 @@ int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, 
 	  z.next_in=Z_NULL;
 		z.avail_in=0;
 		if(deflateInit(&z, Z_DEFAULT_COMPRESSION)!=Z_OK){
-			printf("deflateInit error: %s\n", z.msg);
+			Log(LOG_ERROR, "deflateInit error: %s", z.msg);
 			return 0;
 		}
 
@@ -703,29 +711,29 @@ int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, 
 			
 				encodedData+=copyLength;
 				remainingData-=copyLength;
-				printf("Compress %d bytes\n", copyLength);
+				Log(LOG_DEBUG, "Compress %d bytes", copyLength);
 			}
 			int keyword=(z.avail_in==0?Z_FINISH:Z_NO_FLUSH);
 			
 			// compress
 			zStatus=deflate(&z, keyword);
-			printf("Remaining output space: %d bytes\n", z.avail_out);
-			printf("Remaining input buffer: %d bytes\n", z.avail_in);
+			Log(LOG_DEBUG, "Remaining output space: %d bytes", z.avail_out);
+			Log(LOG_DEBUG, "Remaining input buffer: %d bytes", z.avail_in);
 			if(zStatus==Z_STREAM_END){
-				cout << "end" << endl;
+				Log(LOG_DEBUG, "End");
 				break;
 			}else if(zStatus==Z_OK){
-				cout << "deflate ok" << endl;
+				Log(LOG_DEBUG, "Deflate ok");
 				if(keyword==Z_FINISH && zStatus==Z_STREAM_END){
-					cout << "finish" << endl;
+					Log(LOG_DEBUG, "Finish");
 					break;
 				}
 			}else{
-				printf("deflate error: %s, %d\n", z.msg, zStatus);
+				Log(LOG_ERROR, "Deflate error: %s, %d", z.msg, zStatus);
 				return 0;
 			}
 			if(z.avail_out==0){
-				cout << "Buffer full" << endl;
+				Log(LOG_DEBUG, "Buffer full");
 				// output buffer is full
 				for(i=0; i<ZBUFSIZE; i++){
 					output+=outBuf[i];
@@ -736,11 +744,11 @@ int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, 
 		}
 		// finish compression
 		if(deflateEnd(&z)!=Z_OK){
-			printf("deflateEnd error: %s", z.msg);
+			Log(LOG_ERROR, "DeflateEnd error: %s", z.msg);
 			return 0;
 		}
-			printf("Remaining output space: %d bytes\n", z.avail_out);
-			printf("Remaining input buffer: %d bytes\n", z.avail_in);
+		Log(LOG_DEBUG, "Remaining output space: %d bytes", z.avail_out);
+		Log(LOG_DEBUG, "Remaining input buffer: %d bytes", z.avail_in);
 		for(i=0; i<(ZBUFSIZE-z.avail_out); i++){
 			output+=outBuf[i];
 		}
@@ -863,7 +871,7 @@ PDFVersion::PDFVersion():
 	
 }
 
-bool PDFVersion::set(char* label){
+bool PDFVersion::Set(char* label){
 	// label: "x.y"
 	// (x, y) = (1, 0) ~ (1, 7), (2, 0)
 	if(label[0]=='1'){
@@ -915,7 +923,7 @@ void PDFVersion::print(){
 	// cout << strlen(v) << endl;
 }
 
-bool PDFVersion::isValid(){
+bool PDFVersion::IsValid(){
 	return (!error) && valid;
 }
 

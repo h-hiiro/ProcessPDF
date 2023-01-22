@@ -48,6 +48,7 @@ public:
 	Dictionary();
 	Dictionary(Dictionary* original);
 	void Append(unsigned char* key, void* value, int type);
+	void Append(const char* key, void* value, int type);
 	void Print(int indent);
 	void Print();
 	int Search(unsigned char* key);
@@ -138,13 +139,13 @@ class PDFVersion{
 private:
 	bool error;
 	bool valid;
+	void print();
 public:
 	int major;
 	int minor;
 	PDFVersion();
-	bool set(char* label);
-	bool isValid();
-	void print();
+	bool Set(char* label);
+	bool IsValid();
 	char v[4];
 };
 

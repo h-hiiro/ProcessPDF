@@ -14,7 +14,7 @@ private:
 	ofstream* file;
 	int count; // current position of the file pointer
 	void writeData(char* buffer);
-	void writeData(uchar* binary);
+	void writeData(PDFStr* binary);
 	vector<unsigned char> exportObj(void* obj, int objType, bool encryption);
 	vector<unsigned char> exportObj(void* obj, int objType, bool encryption, int objNumber, int genNumber);
 	double literalStringBorder;

@@ -36,7 +36,6 @@ private:
 	int lastXRef;
 	PDFVersion v_header;
 	PDFVersion v_catalog;
-	PDFVersion v_document;
 	bool findHeader();
 	bool isSpace(char a);
 	bool isEOL(char a);
@@ -78,15 +77,17 @@ private:
 	bool readStream(Stream* stm, bool outputError=true);
 	bool investigatePages(Indirect* pagesRef, Dictionary* pages, int* pageCount);
 	ifstream file;
-	Dictionary trailer;
 	Encryption* encryptObj; // for reading
-	Encryption* encryptObj_ex; // for exporting
-	Indirect** Reference;
-	int ReferenceSize;
 	Page** Pages;
 	int PagesSize;
-	int lastXRefStm;
 public:
+	Encryption* encryptObj_ex; // for exporting
+	PDFVersion v_document;
+	Dictionary trailer;
+	Indirect** Reference;
+	int ReferenceSize;
+	int lastXRefStm;
+	int encryptObjNum;
 	PDFParser(char* fileName);
 	bool HasError();
 	bool IsEncrypted();
@@ -98,9 +99,12 @@ public:
 	bool AuthUser(char* pwd);
 	bool AuthOwner(char* pwd);
 	int GetPageSize();
+	int GetReferenceSize();
 	bool IsAuthenticated();
 	bool ReadVersion();
 	bool ReadPages();
 	bool ReadPageDict(int index, const char* key, void** value, int* type, bool inheritable);
 	bool ReadPageDict(int index, const char* key, void** value, int type, bool inheritable);
+	bool JudgeEncrVersion(int* V);
+	int AddNewReference(int type);
 };

@@ -141,7 +141,9 @@ PDFParser::PDFParser(char* fileName):
 			return;
 		}
 		Dictionary* encryptDict;
-		if(Read(&trailer, "Encrypt", (void**)&encryptDict, Type::Dict)){
+		Indirect* encryptDictRef;
+		if(trailer.Read("Encrypt", (void**)&encryptDictRef, Type::Indirect) &&
+			 Read(&trailer, "Encrypt", (void**)&encryptDict, Type::Dict)){
 			Log(LOG_DEBUG, "Encrypt dictionary:");
 			if(LOG_LEVEL>=LOG_DEBUG){
 				encryptDict->Print();
@@ -153,9 +155,63 @@ PDFParser::PDFParser(char* fileName):
 		}
 		encryptObj=new Encryption(encryptDict, ID);
 		encryptObj_ex=new Encryption(encryptObj);
+		encryptObjNum=encryptDictRef->objNumber;
 		encrypted=true;
 	}else{
 		Log(LOG_INFO, "This document is not encrypted");
+	}
+}
+
+// When the value>0 is given, judge whether the version is consistent with the PDF version
+// When the value<0 is given, set the appropriate (highest) version in the current PDF version
+bool PDFParser::JudgeEncrVersion(int* V){
+	if(v_document.IsValid()){
+		if(*V<0){
+			switch(v_document.major){
+			case 2:
+				*V=5;
+				break;
+			case 1:
+				switch(v_document.minor){
+				case 1:
+				case 2:
+				case 3:
+					*V=1;
+					break;
+				case 4:
+					*V=2;
+					break;
+				case 5:
+				case 6:
+				case 7:
+					*V=4;
+					break;
+				default:
+					return false;
+				}
+				break;
+			default:
+				return false;
+			}
+			Log(LOG_INFO, "Highest encryption version is %d in PDF %s", *V, v_document.v);
+			return true;
+		}else{
+			switch(*V){
+			case 1:
+				return v_document.major==1 && v_document.minor>=1 && v_document.minor<=7;
+			case 2:
+				return v_document.major==1 && v_document.minor>=4 && v_document.minor<=7;
+			case 4:
+				return v_document.major==1 && v_document.minor>=5 && v_document.minor<=7;
+			case 5:
+				return v_document.major==2;
+			default:
+				return false;
+			}
+		}
+	}else{
+		Log(LOG_ERROR, "PDF version is not yet determined");
+		return false;
 	}
 }
 
@@ -170,14 +226,14 @@ bool PDFParser::ReadVersion(){
 	  char* version;
 		if(dCatalog->Search("Version")>=0){
 			if(dCatalog->Read("Version", (void**)&version, Type::Name)){
-				v_catalog.set(version);
+				v_catalog.Set(version);
 				Log(LOG_INFO, "Version in document catalog dictionary is %s", v_catalog.v);
 				if(CompareVersions(v_catalog, v_header)){
 					// catalog>=header
-					v_document.set(v_catalog.v);
+					v_document.Set(v_catalog.v);
 				}else{
 					// catalog<header
-					v_document.set(v_header.v);
+					v_document.Set(v_header.v);
 				}
 				Log(LOG_INFO, "Finally determined version is %s", v_document.v);
 			}else{
@@ -185,9 +241,12 @@ bool PDFParser::ReadVersion(){
 			}
 		}else{
 			Log(LOG_INFO, "No version information in document catalog dictionary");
+			v_document.Set(v_header.v);
+			Log(LOG_INFO, "Finally determined version is %s", v_document.v);
 		}
 	}else{
 		Log(LOG_WARN, "Failed in reading Document catalog dictionary");
+		error=true; return false;
 	}
 	return true;
 }
@@ -264,6 +323,25 @@ bool PDFParser::investigatePages(Indirect* pagesRef, Dictionary* pages, int* pag
 }
 int PDFParser::GetPageSize(){
 	return PagesSize;
+}
+
+int PDFParser::AddNewReference(int type){
+	// add an element to Reference and return the index
+	int addElementIndex=ReferenceSize;
+	ReferenceSize++;
+	Indirect** Reference_new=new Indirect*[ReferenceSize];
+	int i;
+	for(i=0; i<ReferenceSize-1; i++){
+		Reference_new[i]=Reference[i];
+	}
+	Indirect* addElement=new Indirect();
+	addElement->objNumber=addElementIndex;
+	addElement->genNumber=0;
+	addElement->type=type;
+	addElement->used=true;
+	Reference_new[addElementIndex]=addElement;
+	Reference=Reference_new;
+	return addElementIndex;
 }
 
 bool PDFParser::ReadPageDict(int index, const char* key, void** value, int type, bool inheritable){
@@ -725,7 +803,7 @@ bool PDFParser::findHeader(){
 		}
 		// offset is the position of '%'
 		offset=(int)file.tellg()-8;
-		if(!v_header.set(version)){
+		if(!v_header.Set(version)){
 			return false;
 		}
 		if(!gotoEOL(1)){
