@@ -19,5 +19,3 @@ RUN make
 FROM busybox
 WORKDIR /source
 COPY --from=builder /source/*.o ./
-COPY sample ./
-# ENTRYPOINT ["./readPDF.o", "HELLO.pdf"]
