@@ -16,6 +16,9 @@ PDFExporter::PDFExporter(PDFParser* parser):
 {
 	// move Document catalog dictionary out of the object stream
 	// This procedure is necessary for Adobe Reader !!
+	// -> This procedure became unnecessary because ReadRefObj automatically do that
+	//    When ReadPages() is executed
+	/*
 	Indirect* dCatalogRef;
 	Dictionary* dCatalog;
 	if(PP->trailer.Read("Root", (void**)&dCatalogRef, Type::Indirect) &&
@@ -29,8 +32,8 @@ PDFExporter::PDFExporter(PDFParser* parser):
 	}else{
 		Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
 		return;
-	}
-	
+		}*/
+ 
 }
 
 bool PDFExporter::exportToFile(char* fileName){

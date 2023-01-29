@@ -510,6 +510,8 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 		default:
 			Log(LOG_ERROR, "Invalid type"); return false;
 		}
+		// set the objStream flag to false
+		Reference[objNumber]->objStream=false;
 		Log(LOG_DEBUG, "ReadRefObj from object stream finished");
 	}else{
 		Log(LOG_DEBUG, "The object is at %d", refInRef->position);

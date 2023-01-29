@@ -301,6 +301,7 @@ int main(int argc, char** argv){
 		if(Perms->Read("DocMDP", (void**)&DocMDPRef, Type::Indirect) &&
 			 PP.Read(Perms, "DocMDP", (void**)&DocMDP, Type::Dict)){
 			// ok
+			DocMDPRef=PP.Reference[DocMDPRef->objNumber];
 		}else{
 			Log(LOG_ERROR, "Failed in reading the DocMDP dictionary");
 			return -1;
@@ -502,7 +503,7 @@ int main(int argc, char** argv){
 	ByteRange[2]=RTPos+1;
 	ByteRange[3]=outputSize-RTPos-1;
 	int rangeSize=ByteRange[1]+ByteRange[3];
-	Log(LOG_DEBUG, "Data length for signature: %d\n", rangeSize);
+	Log(LOG_DEBUG, "Data length for signature: %d", rangeSize);
 	char ByteRange_c[ByteRangeLength+1];
 	for(i=0; i<ByteRangeLength; i++){
 		ByteRange_c[i]=' ';
