@@ -14,6 +14,23 @@ PDFExporter::PDFExporter(PDFParser* parser):
 	count(0),
 	literalStringBorder(0.3)
 {
+	// move Document catalog dictionary out of the object stream
+	// This procedure is necessary for Adobe Reader !!
+	Indirect* dCatalogRef;
+	Dictionary* dCatalog;
+	if(PP->trailer.Read("Root", (void**)&dCatalogRef, Type::Indirect) &&
+		 PP->Read(&(PP->trailer), "Root", (void**)&dCatalog, Type::Dict)){
+		int dCatalogNum=dCatalogRef->objNumber;
+		Indirect* dCatalogRef2=PP->Reference[dCatalogNum];
+		if(dCatalogRef2->objStream){
+			Log(LOG_INFO, "Document catalog was in an object stream");
+			dCatalogRef2->objStream=false;
+		}
+	}else{
+		Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
+		return;
+	}
+	
 }
 
 bool PDFExporter::exportToFile(char* fileName){
@@ -33,7 +50,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 	PDFStr* binary=new PDFStr(1024);
 	// Header
 	if(PP->v_document.IsValid()){
-		sprintf(buffer, "%s%s%c%c", HEADER, PP->v_document.v, CR, LF);
+		sprintf(buffer, "%s%s%c", HEADER, PP->v_document.v, LF);
 	}else{
 		Log(LOG_ERROR, "PDF version error"); return false;
 	}
@@ -45,7 +62,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 	}
 	binary->decrDataLen=5;
 	writeData(binary);
-	sprintf(buffer, "%c%c", CR, LF);
+	sprintf(buffer, "%c", LF);
 	writeData(buffer);
 
 	if(PP->IsEncrypted()==false && encryption==true){
@@ -87,7 +104,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 		}		
 		// (objNum) (genNum) obj
 		PP->Reference[i]->position=count;
-		sprintf(buffer, "%d %d obj%c%c", i, PP->Reference[i]->genNumber, CR, LF);
+		sprintf(buffer, "%d %d obj%c", i, PP->Reference[i]->genNumber, LF);
 		writeData(buffer);
 		vector<unsigned char> data;
 		data=exportObj(refObj, objType, encryption && (i!=PP->encryptObjNum), PP->Reference[i]->objNumber, PP->Reference[i]->genNumber);
@@ -96,7 +113,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 			data_str->decrData[j]=data[j];
 		}
 		writeData(data_str);
-		sprintf(buffer, "%c%cendobj%c%c", CR, LF, CR, LF);
+		sprintf(buffer, "%cendobj%c", LF, LF);
 		writeData(buffer);
 	}
 	// XRef stream
@@ -122,7 +139,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 	}
 	constructXRefStm();
 	
-	sprintf(buffer, "%d %d obj%c%c", PP->lastXRefStm, PP->Reference[PP->lastXRefStm]->genNumber, CR, LF);
+	sprintf(buffer, "%d %d obj%c", PP->lastXRefStm, PP->Reference[PP->lastXRefStm]->genNumber, LF);
 	writeData(buffer);
 	vector<unsigned char> data;
 	data=exportObj(&XRefStm, Type::Stream, false);
@@ -131,11 +148,11 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 		data_str->decrData[j]=data[j];
 	}
 	writeData(data_str);
-	sprintf(buffer, "%c%cendobj%c%c", CR, LF, CR, LF);
+	sprintf(buffer, "%cendobj%c", LF, LF);
 	writeData(buffer);
 	
 	// footer
-	sprintf(buffer, "%c%cstartxref%c%c%d%c%c%%%%EOF", CR, LF, CR, LF, trailerPosition, CR, LF);
+	sprintf(buffer, "%cstartxref%c%d%c%%%%EOF", LF, LF, trailerPosition, LF);
 	writeData(buffer);
 	file->close();
 	Log(LOG_INFO, "Export finished");
@@ -360,7 +377,7 @@ vector<unsigned char> PDFExporter::exportObj(void* obj, int objType, bool encryp
 		// stream dictionary
 		ret2=exportObj((void*)&(obj_s->StmDict), Type::Dict, encryption, objNumber, genNumber);
 		copy(ret2.begin(), ret2.end(), back_inserter(ret));
-		sprintf(buffer, "%c%cstream%c%c", CR, LF, CR, LF);
+		sprintf(buffer, "%cstream%c", LF, LF);
 		for(i=0; i<strlen(buffer); i++){
 			ret.push_back((unsigned char)buffer[i]);
 		}
@@ -375,7 +392,7 @@ vector<unsigned char> PDFExporter::exportObj(void* obj, int objType, bool encryp
 			}
 		}
 		// stream footer
-		sprintf(buffer, "%c%cendstream", CR, LF);
+		sprintf(buffer, "%cendstream", LF);
 		for(i=0; i<strlen(buffer); i++){
 			ret.push_back((unsigned char)buffer[i]);
 		}

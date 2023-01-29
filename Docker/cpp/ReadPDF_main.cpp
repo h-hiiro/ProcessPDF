@@ -154,20 +154,24 @@ int main(int argc, char** argv){
 		int ContentsType;
 		int numPages=PP.GetPageSize();
 		for(i=0; i<numPages; i++){
+			Log(LOG_INFO, "Page %d", i);
 			if(PP.ReadPageDict(i, "MediaBox", (void**)&MediaBox, Type::Array, true)){
 				Log(LOG_INFO, "Page %d MediaBox:", i);
 				MediaBox->Print();
 			}
+			Log(LOG_DEBUG, "Contents");
 			if(PP.ReadPageDict(i, "Contents", (void**)&ContentsValue, &ContentsType, false)){
 				if(ContentsType==Type::Array){
+					Log(LOG_DEBUG, "Contents is Array");
 					int ContentsSize=((Array*)ContentsValue)->GetSize();
 					for(j=0; j<ContentsSize; j++){
-						if(PP.Read((Array*)ContentsValue, j, (void**)&Contents, Type::Array)){
+						if(PP.Read((Array*)ContentsValue, j, (void**)&Contents, Type::Stream)){
 							Log(LOG_INFO, "Page %d Contents %d:", i, j);
 							printf("%s", Contents->decoData);
 						}
 					}
 				}else if(ContentsType==Type::Stream){
+					Log(LOG_DEBUG, "Contents is Stream");
 					if(LOG_LEVEL>=LOG_DEBUG){
 						Log(LOG_DEBUG, "Page %d Contents:", i, j);
 						printf("%s", ((Stream*)ContentsValue)->decoData);

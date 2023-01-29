@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <string>
+#include <cmath>
 #include "Objects.hpp"
 #include "zlib.h" // /usr/include/zlib.h
 
@@ -767,58 +768,132 @@ int encodeData(unsigned char* decoded, unsigned char* filter, Dictionary* parm, 
 	return 0;
 }
 
+char PaethPredictor(char a, char b, char c){
+	// a=left
+	// b=top
+	// c=left-top
+	char p=a+b-c;
+	char pa=abs(p-a);
+	char pb=abs(p-b);
+	char pc=abs(p-c);
+	if(pa<=pb && pa<=pc){
+		return a;
+	}else if(pb<=pc){
+		return b;
+	}else{
+		return c;
+	}
+}
+		
+
 int PNGPredictor(unsigned char** pointer, int length, Dictionary* parm){
-	// TODO: Average, Paeth predictions
-	// TODO: Colors, BitsPerComponent
 	// read parameters
 	int columns=1;
 	int* columnsValue;
 	if(parm->Read("Columns", (void**)&columnsValue, Type::Int)){
 		columns=*columnsValue;
 	}
-		
-	if(length%(columns+1)!=0){
-		Log(LOG_ERROR, "Failed in PNGPredictor: columns and length mismatch");
-		return 0;
+	int colors=1;
+	int* colorsValue;
+	if(parm->Read("Colors", (void**)&colorsValue, Type::Int)){
+		colors=*colorsValue;
 	}
-	int numRows=length/(columns+1);
-	unsigned char* restored=new unsigned char[numRows*columns];
+	int bits=8;
+	int* bitsValue;
+	if(parm->Read("BitsPerComponent", (void**)&bitsValue, Type::Int)){
+		bits=*bitsValue;
+	}
+	int bytesPerColumn=columns*colors*bits/8;
+	int bpp=colors*bits/8;
+	if((colors*bits)%8!=0){
+		bpp++;
+	}
+		
+	if(length%(bytesPerColumn+1)!=0){
+		Log(LOG_ERROR, "Failed in PNGPredictor: columns and length mismatch, length=%d, columns=%d", length, columns);
+		return 0;
+	}else{
+		Log(LOG_DEBUG, "length=%d, column bytes=%d", length, bytesPerColumn);
+		Log(LOG_DEBUG, "bpp=%d", bpp);
+	}
+	int numRows=length/(bytesPerColumn+1);
+	unsigned char* restored=new unsigned char[numRows*bytesPerColumn];
 	int i, j;
+	char ave_left, ave_top, ave;
+	char pa_left, pa_top, pa_lt, pa;
 	for(i=0; i<numRows; i++){
-		int algorithm=(int)(*pointer)[i*(columns+1)];
+		int algorithm=(int)(*pointer)[i*(bytesPerColumn+1)];
 		switch(algorithm){
 		case 0:
 			// none
-			for(j=0; j<columns;j++){
-				restored[i*columns+j]=(*pointer)[i*(columns+1)+j+1];
+			for(j=0; j<bytesPerColumn;j++){
+				restored[i*bytesPerColumn+j]=(*pointer)[i*(bytesPerColumn+1)+j+1];
 			}
 			break;
 		case 1:
 			// Sub
-			for(j=0; j<columns; j++){
-				if(j<1){
-					restored[i*columns+j]=(*pointer)[i*(columns+1)+j+1];
+			for(j=0; j<bytesPerColumn; j++){
+				if(j<bpp){
+					restored[i*bytesPerColumn+j]=(*pointer)[i*(bytesPerColumn+1)+j+1];
 				}else{
-					restored[i*columns+j]=(*pointer)[i*(columns+1)+j+1]+restored[i*columns+j-1];
+					restored[i*bytesPerColumn+j]=(*pointer)[i*(bytesPerColumn+1)+j+1]+restored[i*bytesPerColumn+j-bpp];
 				}
 			}
 			break;
 		case 2:
 			// Up
 			if(i==0){
-				for(j=0; j<columns; j++){
-					restored[i*columns+j]=(*pointer)[i*(columns+1)+j+1];
+				for(j=0; j<bytesPerColumn; j++){
+					restored[i*bytesPerColumn+j]=(*pointer)[i*(bytesPerColumn+1)+j+1];
 				}
 			}else{
-				for(j=0; j<columns; j++){
-					restored[i*columns+j]=(*pointer)[i*(columns+1)+j+1]+restored[(i-1)*columns+j];
+				for(j=0; j<bytesPerColumn; j++){
+					restored[i*bytesPerColumn+j]=(*pointer)[i*(bytesPerColumn+1)+j+1]+restored[(i-1)*bytesPerColumn+j];
 				}
 			}
 			break;
+		case 3:
+			// Average
+			if(i==0){
+				ave_top=0;
+			}else{
+				ave_top=restored[(i-1)*bytesPerColumn+j];
+			}
+			if(j<bpp){
+				ave_left=0;
+			}else{
+				ave_left=restored[i*bytesPerColumn+j-bpp];
+			}
+			ave=(*pointer)[i*(bytesPerColumn+1)+j+1];
+			restored[i*bytesPerColumn+j]=ave+floor((ave_left+ave_top)/2);
+			break;
+		case 4:
+			//Paeth
+			if(i==0){
+				pa_top=0;
+			}else{
+				pa_top=restored[(i-1)*bytesPerColumn+j];
+			}
+			if(j<bpp){
+				pa_left=0;
+			}else{
+				pa_left=restored[i*bytesPerColumn+j-bpp];
+			}
+			if(i==0 || j<bpp){
+				pa_lt=0;
+			}else{
+				pa_lt=restored[(i-1)*bytesPerColumn+j-bpp];
+			}
+			pa=(*pointer)[i*(bytesPerColumn+1)+j+1];
+			restored[i*bytesPerColumn+j]=pa+PaethPredictor(pa_left, pa_top, pa_lt);
+			break;
+		default:
+			Log(LOG_ERROR, "Unsupported predictor algorithm %d", algorithm);
+			return 0;
 		}
 	}
 	*pointer=&restored[0];
-	return numRows*columns;
+	return numRows*bytesPerColumn;
 }
 
 Page::Page(){

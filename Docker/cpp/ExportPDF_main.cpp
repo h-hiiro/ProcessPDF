@@ -325,7 +325,18 @@ int main(int argc, char** argv){
 			}
 			ID=new Array();
 			ID->Append(id1, Type::String);
+			PDFStr* id2=new PDFStr(16);
+			id2->isHexStr=true;
+			for(i=0; i<16; i++){
+				id2->decrData[i]=(unsigned char)(rand()%256);
+			}
+			if(LOG_LEVEL>=LOG_DEBUG){
+				Log(LOG_DEBUG, "Prepared ID:");
+				DumpPDFStr(id2);
+			}
+			ID=new Array();
 			ID->Append(id1, Type::String);
+			ID->Append(id2, Type::String);
 			PP.trailer.Append("ID", ID, Type::Array);
 		}
 		

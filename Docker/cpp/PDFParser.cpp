@@ -666,7 +666,7 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int objType){
 		if(readType==objType){
 			return true;
 		}else{
-			Log(LOG_ERROR, "Type mismatch in ReadRefObj");
+			Log(LOG_ERROR, "Type mismatch in ReadRefObj, Read = %d, Target = %d", readType, objType);
 		}
 	}
 	return false;
