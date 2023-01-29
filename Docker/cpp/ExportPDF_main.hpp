@@ -4,13 +4,13 @@
 
 // options
 struct option longOpts[]={
-	{"dest",    required_argument, NULL, 'd'},
 	{"help",    no_argument,       NULL, 'h'},
 	{"in",      required_argument, NULL, 'i'},
 	{"owner",   required_argument, NULL, 'o'},
 	{"user",    required_argument, NULL, 'u'},
 	{"verbose", required_argument, NULL, 'v'},
-	{"Encrypt", no_argument,        NULL, 'E'},
+	{"Dest",    required_argument, NULL, 'D'},
+	{"Encrypt", no_argument,       NULL, 'E'},
 	{"Length",  required_argument, NULL, 'L'},
 	{"Owner",   required_argument, NULL, 'O'},
 	{"Perms",   required_argument, NULL, 'P'},

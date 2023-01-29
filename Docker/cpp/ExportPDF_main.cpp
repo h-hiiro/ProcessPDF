@@ -170,6 +170,7 @@ int main(int argc, char** argv){
 			return -1;
 		}else{
 			Log(LOG_INFO, "Authentication ok");
+			PP.CopyEncryptObj();
 		}
 	}
 	// Version in Document catalog dictionary

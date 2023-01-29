@@ -591,7 +591,7 @@ bool Encryption::EncryptStream(Stream* stm){
 
 bool Encryption::EncryptString(PDFStr* str, int objNumber, int genNumber){
 	if(!FEKObtained){
-		Log(LOG_ERROR, "Not yet authenticated!"); return false;
+		Log(LOG_ERROR, "Not yet authenticated!123456"); return false;
 	}
 	// prepare buffer for encrypted data
 	// slightly longer than original due to padding and iv (16)
@@ -868,7 +868,7 @@ bool Encryption::execEncryption(unsigned char** encrypted, int* elength, unsigne
 		result=EVP_DigestFinal_ex(md5ctx, &hashed_md5[0], &count);
 		
 		// key
-		int key_length=max(Length_bytes+5, 16);
+		int key_length=min(Length_bytes+5, 16);
 		unsigned char key[key_length];
 		for(i=0; i<key_length; i++){
 			key[i]=hashed_md5[i];
@@ -1948,7 +1948,7 @@ void Encryption::EncryptO(unsigned char* paddedUserPwd, PDFStr* RC4fek){
 		unsigned char encrypted_rc4[32];
 		unsigned char unencrypted[32];
 		for(i=0; i<32; i++){
-			encrypted_rc4[i]=paddedUserPwd[i];
+			unencrypted[i]=paddedUserPwd[i];
 		}
 		int result;
 		int rc4count;

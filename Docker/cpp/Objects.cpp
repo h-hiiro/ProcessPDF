@@ -122,6 +122,9 @@ void Dictionary::Append(unsigned char* key, void* value, int type){
 	values.push_back(value);
 	types.push_back(type);
 }
+bool Dictionary::Update(const char* key, void* value, int type){
+	return Update((unsigned char*)key, value, type);
+}
 
 bool Dictionary::Update(unsigned char* key, void* value, int type){
 	int index=Search(key);

@@ -62,6 +62,7 @@ public:
 	int GetSize();
 	void Delete(int index);
 	bool Update(unsigned char* key, void* value, int type);
+	bool Update(const char* key, void* value, int type);
 };
 
 // Array object

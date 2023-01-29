@@ -154,12 +154,15 @@ PDFParser::PDFParser(char* fileName):
 			return;
 		}
 		encryptObj=new Encryption(encryptDict, ID);
-		encryptObj_ex=new Encryption(encryptObj);
 		encryptObjNum=encryptDictRef->objNumber;
 		encrypted=true;
 	}else{
 		Log(LOG_INFO, "This document is not encrypted");
 	}
+}
+
+void PDFParser::CopyEncryptObj(){
+	encryptObj_ex=new Encryption(encryptObj);
 }
 
 // When the value>0 is given, judge whether the version is consistent with the PDF version
@@ -382,6 +385,11 @@ bool PDFParser::ReadPageDict(int index, const char* key, void** value, int* type
 	}else{
 		return Read(page->PageDict, key, value, type);
 	}
+}
+
+void PDFParser::AppendToPageDict(int index, const char* key, void* value, int type){
+	Page* page=Pages[index];
+	page->PageDict->Append(key, value, type);
 }
 
 bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
@@ -1136,7 +1144,7 @@ int PDFParser::readXRef(int position){
 				}
 				if(Reference[currentObjNumber]->objNumber>=0){
 					// reference is already read
-					Log(LOG_WARN, "XRef #%d is already read\n", currentObjNumber);
+					Log(LOG_WARN, "XRef #%d is already read", currentObjNumber);
 					continue;
 				}
 				Reference[currentObjNumber]->objNumber=currentObjNumber;

@@ -91,6 +91,7 @@ public:
 	PDFParser(char* fileName);
 	bool HasError();
 	bool IsEncrypted();
+	void CopyEncryptObj();
 	bool ReadRefObj(Indirect* ref, void** object, int* objType);
 	bool ReadRefObj(Indirect* ref, void** object, int objType);
 	bool Read(Dictionary* dict, const char* key, void** value, int* type);
@@ -105,6 +106,7 @@ public:
 	bool ReadPages();
 	bool ReadPageDict(int index, const char* key, void** value, int* type, bool inheritable);
 	bool ReadPageDict(int index, const char* key, void** value, int type, bool inheritable);
+	void AppendToPageDict(int index, const char* key, void* value, int type);
 	bool JudgeEncrVersion(int* V);
 	int AddNewReference(int type);
 };
