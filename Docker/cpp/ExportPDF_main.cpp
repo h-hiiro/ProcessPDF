@@ -299,7 +299,7 @@ int main(int argc, char** argv){
 		// password
 		PDFStr* newUserPwd_str=new PDFStr(strlen(newUserPwd));
 		unsignedstrcpy(newUserPwd_str->decrData, newUserPwd);
-		PDFStr* newOwnerPwd_str=new PDFStr(strlen(newUserPwd));
+		PDFStr* newOwnerPwd_str=new PDFStr(strlen(newOwnerPwd));
 		unsignedstrcpy(newOwnerPwd_str->decrData, newOwnerPwd);
 
 		// prepare IDs
