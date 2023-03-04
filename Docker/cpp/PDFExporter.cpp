@@ -33,7 +33,16 @@ PDFExporter::PDFExporter(PDFParser* parser):
 		Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
 		return;
 		}*/
- 
+
+	// PDF Ver>=1.5 -> Cross-reference streams
+	// PDF Ver<1.5 -> Cross-reference tables
+	if(PP->v_document.IsValid() &&
+		 ((PP->v_document.major==1 && PP->v_document.minor>=5) ||
+			PP->v_document.major>=2)){
+		XRefStmUsed=true;
+	}else{
+		XRefStmUsed=false;
+	} 
 }
 
 bool PDFExporter::exportToFile(char* fileName){
@@ -91,7 +100,7 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 		Log(LOG_INFO, "Export Ref #%4d", i);
 		void* refObj;
 		int objType;
-		if(i==PP->lastXRefStm){
+		if(XRefStmUsed && i==PP->lastXRefStm){
 			// XRef stream is exported at the last
 			continue;
 		}else{
@@ -119,15 +128,17 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 		sprintf(buffer, "%cendobj%c", LF, LF);
 		writeData(buffer);
 	}
-	// XRef stream
-	if(PP->lastXRefStm<0){
-		// no XRef stream exists in the original
-		PP->lastXRefStm=PP->AddNewReference(Type::Stream);
+	if(XRefStmUsed){
+		// XRef stream
+		if(PP->lastXRefStm<0){
+			// no XRef stream exists in the original
+			PP->lastXRefStm=PP->AddNewReference(Type::Stream);
+		}
+		PP->Reference[PP->lastXRefStm]->position=count;
 	}
-	PP->Reference[PP->lastXRefStm]->position=count;
 	int trailerPosition=count;
 
-	// trailer
+	// trailer preparation
 	if(!encryption){
 		// remove "Encrypt"
 		int encryptIndex=PP->trailer.Search("Encrypt");
@@ -140,19 +151,119 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 	if(prevIndex>=0){
 		PP->trailer.Delete(prevIndex);
 	}
-	constructXRefStm();
+
+	if(XRefStmUsed){
+		// XRef stream
+		Log(LOG_INFO, "Export cross-reference stream");
+		constructXRefStm();
 	
-	sprintf(buffer, "%d %d obj%c", PP->lastXRefStm, PP->Reference[PP->lastXRefStm]->genNumber, LF);
-	writeData(buffer);
-	vector<unsigned char> data;
-	data=exportObj(&XRefStm, Type::Stream, false);
-	PDFStr* data_str=new PDFStr(data.size());
-	for(j=0; j<data.size(); j++){
-		data_str->decrData[j]=data[j];
+		sprintf(buffer, "%d %d obj%c", PP->lastXRefStm, PP->Reference[PP->lastXRefStm]->genNumber, LF);
+		writeData(buffer);
+		vector<unsigned char> data;
+		data=exportObj(&XRefStm, Type::Stream, false);
+		PDFStr* data_str=new PDFStr(data.size());
+		for(j=0; j<data.size(); j++){
+			data_str->decrData[j]=data[j];
+		}
+		writeData(data_str);
+		sprintf(buffer, "%cendobj%c", LF, LF);
+		writeData(buffer);
+	}else{
+		// XRef table
+		Log(LOG_INFO, "Export cross-reference table");
+		sprintf(buffer, "xref%c%c", CR, LF);
+		writeData(buffer);
+		// 0 -> free
+		// 1 -> used
+		// 2 -> in the object stream
+		int* typeList=new int[PP->ReferenceSize];
+		for(i=0; i<PP->ReferenceSize; i++){
+			if(PP->Reference[i]->objStream){
+				typeList[i]=2;
+			}else if(PP->Reference[i]->used){
+				typeList[i]=1;
+			}else{
+				typeList[i]=0;
+			}
+		}
+		int numSubsections=1;
+		i=0;
+		while(i<PP->ReferenceSize){
+			if(typeList[i]==0 || typeList[i]==1){
+				i++;
+				continue;
+			}else{
+				while(typeList[i]==2 && i<PP->ReferenceSize){
+					i++;
+				}
+				if(i<PP->ReferenceSize){
+					numSubsections++;
+				}
+			}
+		}
+		int firstIndex[numSubsections];
+		int numEntries[numSubsections];
+		bool in_list=true;
+		i=0;
+		int subsectionIndex=0;
+		firstIndex[0]=0;
+		while(i<PP->ReferenceSize){
+			if(typeList[i]==0 || typeList[i]==1){
+				i++;
+				continue;
+			}else{
+				in_list=false;
+				numEntries[subsectionIndex]=i-firstIndex[subsectionIndex];
+				while(typeList[i]==2 && i<PP->ReferenceSize){
+					i++;
+				}
+				if(i<PP->ReferenceSize){
+					subsectionIndex++;
+					firstIndex[subsectionIndex]=i;
+					in_list=true;
+				}
+			}
+		}
+		if(in_list){
+			numEntries[subsectionIndex]=i-firstIndex[subsectionIndex];
+		}
+		int k;
+		for(k=0; k<numSubsections; k++){
+			sprintf(buffer, "%d %d%c", firstIndex[k], numEntries[k], LF);
+			writeData(buffer);
+			for(i=0; i<numEntries[k]; i++){
+				int index=i+firstIndex[k];
+				int nextFreeNumber;
+				if(!(PP->Reference[index]->objStream) && PP->Reference[index]->used){
+					// used
+					// no offset
+					sprintf(buffer, "%010d %05d %c%c%c", PP->Reference[index]->position, PP->Reference[index]->genNumber,'n', CR, LF);
+					writeData(buffer);
+				}else{
+					// free
+					nextFreeNumber=0;
+					for(j=index+1; j<PP->ReferenceSize; j++){
+						if(!PP->Reference[j]->objStream && !PP->Reference[j]->used){
+							nextFreeNumber=j;
+							break;
+						}
+					}
+					sprintf(buffer, "%010d %05d %c%c%c", nextFreeNumber, PP->Reference[index]->genNumber, 'f', CR, LF);
+					writeData(buffer);
+				}
+			}
+		}
+	
+		sprintf(buffer, "trailer%c", LF);
+		writeData(buffer);	
+		vector<unsigned char> data2=exportObj((void*)&(PP->trailer), Type::Dict, false);
+		// PP->trailer.Print();
+		PDFStr* data_uc2=new PDFStr(data2.size());
+		for(i=0; i<data2.size(); i++){
+			data_uc2->decrData[i]=data2[i];
+		}
+		writeData(data_uc2);
 	}
-	writeData(data_str);
-	sprintf(buffer, "%cendobj%c", LF, LF);
-	writeData(buffer);
 	
 	// footer
 	sprintf(buffer, "%cstartxref%c%d%c%%%%EOF", LF, LF, trailerPosition, LF);

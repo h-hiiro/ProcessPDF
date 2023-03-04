@@ -381,7 +381,7 @@ bool Stream::Decode(){
 					return false;
 				}
 			}else{
-				parmType==Type::Null;
+				parmType=Type::Null;
 			}
 			
 			if(parmType==Type::Dict){
@@ -390,7 +390,7 @@ bool Stream::Decode(){
 			}else if(parmType==Type::Null){
 				decoBufLen=decodeData(encoBuffer, filterName, NULL, encoBufLen, &decoBuffer);
 			}else{
-				Log(LOG_ERROR, "Invalid DecodeParm type");
+				Log(LOG_ERROR, "Invalid DecodeParm type: %d", parmType);
 				return false;
 			}
 			if(decoBufLen==0){

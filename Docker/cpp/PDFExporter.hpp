@@ -20,6 +20,7 @@ private:
 	double literalStringBorder;
 	void constructXRefStm();
 	Stream XRefStm;
+	bool XRefStmUsed;
 public:
 	PDFExporter(PDFParser* parser);
 	bool exportToFile(char* fileName);
