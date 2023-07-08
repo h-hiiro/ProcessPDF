@@ -1,9 +1,10 @@
 
-all: ReadPDF.o ExportPDF.o AddSignature.o
+all: ReadPDF.o ExportPDF.o AddSignature.o ModifyMetadata.o
 
 lib_r= log.o PDFParser.o Objects.o Encryption.o
 lib_e= log.o PDFParser.o Objects.o Encryption.o PDFExporter.o
 lib_a= log.o PDFParser.o Objects.o Encryption.o PDFExporter.o
+lib_m= log.o PDFParser.o Objects.o Encryption.o PDFExporter.o
 option=-g -l ssl -l crypto -lz -lgsasl -static
 
 ReadPDF.o: ReadPDF_main.o $(lib_r)
@@ -17,6 +18,10 @@ ExportPDF.o: ExportPDF_main.o $(lib_e)
 AddSignature.o: AddSignature_main.o $(lib_a)
 	$(CXX) AddSignature_main.o $(lib_a) $(option) -o AddSignature.o
 	cp AddSignature.o ../
+
+ModifyMetadata.o: ModifyMetadata_main.o $(lib_a)
+	$(CXX) ModifyMetadata_main.o $(lib_a) $(option) -o ModifyMetadata.o
+	cp ModifyMetadata.o ../
 
 .cpp.o:
 	$(CXX) -c -g -Wno-format-security $<
