@@ -913,6 +913,109 @@ PDFStr::PDFStr(int dDL):
 	decrData=new unsigned char[decrDataLen+1];
 }
 
+// for text string
+PDFStr* PDFStr::ConvertToUTF8(){
+	// Log(LOG_DEBUG, "ConvertToUTF8");
+	PDFStr* ret;
+	int i;
+	// head bytes check
+	if(decrDataLen>=2 && decrData[0]==0xfe && decrData[1]==0xff){
+		//Log(LOG_DEBUG, "UTF-16BE");
+		i=2;
+		ret=new PDFStr((decrDataLen-2)*2);
+		int count=0;
+		while(i<decrDataLen){
+			unsigned int char1=(int(decrData[i])<<8)+decrData[i+1];
+			unsigned int char2=0;
+			i+=2;
+			if(char1>>10==0b110110){
+				char2=(int(decrData[i])<<8)+decrData[i+1];
+				char1=char1 & 0b1111111111;
+				char2=char2 & 0b1111111111;
+				char1=(char1<<10)+char2+0x10000;
+				i+=2;
+			}
+			//Log(LOG_DEBUG, "%021b", char1);
+			if(char1<0x0080){
+				// 1 byte
+				ret->decrData[count]=(unsigned char)char1;
+				count++;
+			}else if(char1<0x0800){
+				// 2 bytes
+				ret->decrData[count]=  (unsigned char)(0b11000000+(char1>>6));
+				ret->decrData[count+1]=(unsigned char)(0b10000000+(char1 & 0b00111111));
+				count+=2;
+			}else if(char1<0xffff){
+				// 3 bytes
+				ret->decrData[count]=  (unsigned char)(0b11100000+(char1>>12));
+				ret->decrData[count+1]=(unsigned char)(0b10000000+(char1>>6 & 0b00111111));
+				ret->decrData[count+2]=(unsigned char)(0b10000000+(char1    & 0b00111111));
+				count+=3;
+			}else{
+				// 4 bytes
+				ret->decrData[count]=  (unsigned char)(0b11110000+(char1>>18));
+				ret->decrData[count+1]=(unsigned char)(0b10000000+(char1>>12 & 0b00111111));
+				ret->decrData[count+2]=(unsigned char)(0b10000000+(char1>>6  & 0b00111111));
+				ret->decrData[count+3]=(unsigned char)(0b10000000+(char1     & 0b00111111));
+				count+=4;
+			}
+			ret->decrData[count]='\0';
+			ret->decrDataLen=count;
+		}
+	}else if(decrDataLen>=3 && decrData[0]==0xef && decrData[1]==0xbb && decrData[2]==0xbf){
+		//Log(LOG_DEBUG, "UTF-8");
+		ret=new PDFStr(decrDataLen-3);
+		for(int i=0; i<decrDataLen-3; i++){
+			ret->decrData[i]=decrData[i+3];
+		}
+	}else{
+		ret=new PDFStr(decrDataLen);
+		for(int i=0; i<decrDataLen; i++){
+			ret->decrData[i]=decrData[i];
+		}
+		ret->decrData[decrDataLen]='\0';
+	}
+	return ret;
+}
+
+// need "" if , or \r or \n or " is included
+// " is replaced by ""
+PDFStr* PDFStr::CSVEscape(){
+	bool dquoteRequired=false;
+	int numDquotes=0;
+	for(int i=0; i<decrDataLen; i++){
+		if(decrData[i]=='\r' || decrData[i]=='\n' || decrData[i]==',' || decrData[i]=='"'){
+			dquoteRequired=true;
+		}
+		if(decrData[i]=='"'){
+			numDquotes++;
+		}
+	}
+	PDFStr* ret=new PDFStr(decrDataLen+(dquoteRequired?2:0)+numDquotes);
+	int index=0;
+	if(dquoteRequired){
+		ret->decrData[index]='"';
+		index++;
+	}
+	for(int i=0; i<decrDataLen; i++){
+		if(decrData[i]=='"'){
+			ret->decrData[index]='"';
+			ret->decrData[index+1]='"';
+			index+=2;
+		}else{
+			ret->decrData[index]=decrData[i];
+			index++;
+		}
+	}
+
+	if(dquoteRequired){
+		ret->decrData[index]='"';
+		index++;
+	}
+	ret->decrData[index]='\0';
+	return ret;
+}
+
 int byteSize(int n){
 	int byte=1;
 	while(n>=256){

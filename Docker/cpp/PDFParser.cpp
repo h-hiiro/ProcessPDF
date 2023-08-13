@@ -675,16 +675,53 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int objType){
 }
 
 
-bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type){
+bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type, bool inheritable){
 	int readType;
-	if(Read(dict, key, value, &readType)){
-		if(readType==type){
-			return true;
-		}else{
-			Log(LOG_ERROR, "Type mismatch in PDFParser::Read");
+	if(dict->Search(key)>=0){
+		// key exists
+		if(Read(dict, key, value, &readType)){
+			if(readType==type){
+				return true;
+			}else{
+				Log(LOG_ERROR, "Type mismatch in PDFParser::Read");
+				return false;
+			}
+		}
+	}else if(inheritable){
+		Dictionary* parent;
+		Dictionary* child=dict;
+		while(true){
+			if(child->Search("Parent")>=0){
+				// parent exists
+				if(Read(child, "Parent", (void**)&parent, Type::Dict)){
+					if(parent->Search(key)>=0){
+						// key exists
+						if(Read(parent, key, value, &readType)){
+							if(readType==type){
+								return true;
+							}else{
+								Log(LOG_ERROR, "Type mismatch in PDFParser::Read");
+								return false;
+							}
+						}else{
+							return false;
+						}
+					}else{
+						child=parent;
+					}
+				}else{
+					break;
+				}
+			}else{
+				break;
+			}
 		}
 	}
 	return false;
+}
+
+bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int type){
+	return Read(dict, key, value, type, false);
 }
 
 bool PDFParser::Read(Dictionary* dict, const char* key, void** value, int* type){

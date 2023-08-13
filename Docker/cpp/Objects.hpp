@@ -108,6 +108,8 @@ public:
 	bool isHexStr;
 	PDFStr();
 	PDFStr(int dDL);
+	PDFStr* ConvertToUTF8();
+	PDFStr* CSVEscape();
 };
 
 // Stream object

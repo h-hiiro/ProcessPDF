@@ -96,6 +96,7 @@ public:
 	bool ReadRefObj(Indirect* ref, void** object, int objType);
 	bool Read(Dictionary* dict, const char* key, void** value, int* type);
 	bool Read(Dictionary* dict, const char* key, void** value, int type);
+	bool Read(Dictionary* dict, const char* key, void** value, int type, bool inheritable);
 	bool Read(Array* array, int index, void** value, int type);
 	bool AuthUser(char* pwd);
 	bool AuthOwner(char* pwd);
