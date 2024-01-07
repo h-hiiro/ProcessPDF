@@ -420,46 +420,38 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 			Log(LOG_ERROR, "Failed in reading an object stream");
 			return false;
 		}
-		if(encrypted && refInRef->notEncrypted==false){
-			Log(LOG_DEBUG, "Decrypt stream");
-			if(!encryptObj->DecryptStream(objStream)){
-				Log(LOG_ERROR, "Error in decrypting stream");
-				return false;
-			}
+		// if(encrypted && refInRef->notEncrypted==false){
+		// 	Log(LOG_DEBUG, "Decrypt stream");
+		// 	if(!encryptObj->DecryptStream(objStream)){
+		// 		Log(LOG_ERROR, "Error in decrypting stream");
+		//		return false;
+		//	}
+		//}
+		//bool decodeResult=objStream->Decode();
+		//if(decodeResult==false){
+		//	Log(LOG_ERROR, "Decode failed");
+		//	return false;
+		//}
+		if(objStream->decoded==false){
+			Log(LOG_ERROR, "The object stream is not decoded");
+			return false;
 		}
-		objStream->Decode();
 
 		// get the offset
-		int* First;
-		int* N;
-		
+		int First=objStream->objStreamOffset;
 		int index=refInRef->objStreamIndex;
-		if(!objStream->StmDict.Read("First", (void**)&First, Type::Int)){
-			Log(LOG_ERROR, "Failed in reading First");
-			return false;
-		}
-		if(!objStream->StmDict.Read("N", (void**)&N, Type::Int)){
-			Log(LOG_ERROR, "Failed in reading N");
-			return false;
-		}
 		string data((char*)objStream->decoData, objStream->decoDataLen);
 		istringstream is(data);
 		int positionInObjStream;
-		for(i=0; i<*N; i++){
-			int v1, v2;
-			readInt(&v1, &is);
-			readInt(&v2, &is);
-			// printf("%d %d\n", v1, v2);
-			if(i==index){
-				if(v1==objNumber){
-					positionInObjStream=v2+*First;
-					Log(LOG_DEBUG, "object #%d is at %d", v1, positionInObjStream);
-					break;
-				}else{
-					Log(LOG_ERROR, "objNumber mismatch %d %d", v1, objNumber);
-					return false;
-				}
-			}
+		int v1=objStream->includedObjNumbers[index];
+		int v2=objStream->includedObjOffsets[index];
+		// printf("%d %d\n", v1, v2);
+		if(v1==objNumber){
+			positionInObjStream=v2+First;
+			Log(LOG_DEBUG, "object #%d is at %d", v1, positionInObjStream);
+		}else{
+			Log(LOG_ERROR, "objNumber mismatch %d %d", v1, objNumber);
+			return false;
 		}
 		is.seekg(positionInObjStream, ios_base::beg);
 		*objType=judgeType(&is);
@@ -511,8 +503,9 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 			Log(LOG_ERROR, "Invalid type"); return false;
 		}
 		// set the objStream flag to false
-		Reference[objNumber]->objStream=false;
+		// Reference[objNumber]->objStream=false;
 		Log(LOG_DEBUG, "ReadRefObj from object stream finished");
+		objStream->used=true;
 	}else{
 		Log(LOG_DEBUG, "The object is at %d", refInRef->position);
 		file.seekg(refInRef->position+offset, ios_base::beg);
@@ -653,13 +646,76 @@ bool PDFParser::ReadRefObj(Indirect* ref, void** object, int* objType){
 			}
 		}
 		if(*objType==Type::Stream){
-			((Stream*)(*object))->Decode();
+			// Perform decoding
+			bool decodeResult=((Stream*)(*object))->Decode();
+			if(decodeResult==false){
+				Log(LOG_WARN, "Decode failed");
+			}else{
+				Log(LOG_DEBUG, "Decode succeeded");
+			}
+
+			// Check whether the object is an object stream
+			unsigned char* typeNameRef;
+			Stream* streamObject=(Stream*)*object;
+			if(Read(&(streamObject->StmDict),"Type", (void**) &typeNameRef,Type::Name)){
+				Log(LOG_DEBUG, "Stream Type: %s", typeNameRef);
+				if(unsignedstrcmp(typeNameRef, "ObjStm")){
+					Log(LOG_DEBUG, "This stream is an object stream");
+					Log(LOG_DEBUG, "Contents: %s", streamObject->decoData);
+					streamObject->objStream=true;
+					// make the list of the included objects
+					int *FirstRef;
+					int *NRef;
+					if (!streamObject->StmDict.Read("First", (void **)&FirstRef, Type::Int))
+					{
+						Log(LOG_ERROR, "Failed in reading First");
+						return false;
+					}
+					if (!streamObject->StmDict.Read("N", (void **)&NRef, Type::Int))
+					{
+						Log(LOG_ERROR, "Failed in reading N");
+						return false;
+					}
+
+					int First = *FirstRef;
+					int N = *NRef;
+					streamObject->numObjects=N;
+					streamObject->objStreamOffset=First;
+					streamObject->includedObjNumbers=new int[N];
+					streamObject->includedObjOffsets=new int[N];
+
+					Log(LOG_DEBUG, "Number of objects: %d", N);
+
+					string data((char *)streamObject->decoData, streamObject->decoDataLen);
+					istringstream is(data);
+					int positionInObjStream;
+					for (int i = 0; i < N; i++){
+						int v1, v2;
+						readInt(&v1, &is);
+						readInt(&v2, &is);
+						streamObject->includedObjNumbers[i]=v1;
+						streamObject->includedObjOffsets[i]=v2;
+					}
+					if(LOG_LEVEL>=LOG_DEBUG){
+						Log(LOG_DEBUG, "Object numbers included in the object stream");
+						for(int i=0; i<N; i++){
+							printf("%d ", streamObject->includedObjNumbers[i]);
+						}
+						printf("\n");
+					}
+				}
+			}else{
+				Log(LOG_DEBUG, "Stream Type: not specified");
+			}
+
 		}
 		Log(LOG_DEBUG, "ReadRefObj finished");
 	}
+
 	refInRef->position=-1;
 	refInRef->type=*objType;
 	refInRef->value=*object;
+
 	return true;
 }
 bool PDFParser::ReadRefObj(Indirect* ref, void** object, int objType){

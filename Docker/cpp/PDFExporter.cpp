@@ -14,26 +14,6 @@ PDFExporter::PDFExporter(PDFParser* parser):
 	count(0),
 	literalStringBorder(0.3)
 {
-	// move Document catalog dictionary out of the object stream
-	// This procedure is necessary for Adobe Reader !!
-	// -> This procedure became unnecessary because ReadRefObj automatically do that
-	//    When ReadPages() is executed
-	/*
-	Indirect* dCatalogRef;
-	Dictionary* dCatalog;
-	if(PP->trailer.Read("Root", (void**)&dCatalogRef, Type::Indirect) &&
-		 PP->Read(&(PP->trailer), "Root", (void**)&dCatalog, Type::Dict)){
-		int dCatalogNum=dCatalogRef->objNumber;
-		Indirect* dCatalogRef2=PP->Reference[dCatalogNum];
-		if(dCatalogRef2->objStream){
-			Log(LOG_INFO, "Document catalog was in an object stream");
-			dCatalogRef2->objStream=false;
-		}
-	}else{
-		Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
-		return;
-		}*/
-
 	// PDF Ver>=1.5 -> Cross-reference streams
 	// PDF Ver<1.5 -> Cross-reference tables
 	if(PP->v_document.IsValid() &&
@@ -50,6 +30,54 @@ bool PDFExporter::exportToFile(char* fileName){
 }
 
 bool PDFExporter::exportToFile(char* fileName, bool encryption){
+	if(encryption){
+		Log(LOG_INFO, "Check Document catalog dictionary");
+		// move Document catalog dictionary out of the object stream
+		// This procedure is necessary for Adobe Reader !!
+		Indirect *dCatalogRef;
+		Dictionary *dCatalog;
+		if (PP->trailer.Read("Root", (void **)&dCatalogRef, Type::Indirect) &&
+			PP->Read(&(PP->trailer), "Root", (void**)&dCatalog, Type::Dict)){
+			int dCatalogNumber = dCatalogRef->objNumber;
+			Indirect* dCatalogRefInRef=PP->Reference[dCatalogNumber];
+			int dCatalogIndex=dCatalogRefInRef->objStreamIndex;
+			int dCatalogStmNumber=dCatalogRefInRef->objStreamNumber;
+			Log(LOG_DEBUG, "Number: %d, Index: %d, StmNumber: %d", dCatalogNumber, dCatalogIndex, dCatalogStmNumber);
+			Indirect *dCatalogRef2 = PP->Reference[dCatalogNumber];
+			if (dCatalogRef2->objStream){
+				dCatalogRef2->objStream = false;
+				Stream* Parent;
+				if(PP->ReadRefObj(PP->Reference[dCatalogStmNumber], (void**)&Parent, Type::Stream)){
+					// shift objStreamIndex
+					int N=Parent->numObjects;
+					int* incObjNums2=new int[N-1];
+					int* incObjOffs2=new int[N-1];
+					int index=0;
+					for(int i=0; i<N; i++){
+						if(Parent->includedObjNumbers[i]!=dCatalogNumber){
+							incObjNums2[index]=Parent->includedObjNumbers[i];
+							incObjOffs2[index]=Parent->includedObjOffsets[i];
+							index++;
+						}
+						if(dCatalogIndex<i){
+							PP->Reference[Parent->includedObjNumbers[i]]->objStreamIndex--;
+						}
+					}
+					Parent->includedObjNumbers=incObjNums2;
+					Parent->includedObjOffsets=incObjOffs2;
+					Parent->numObjects--;
+				}else{
+					Log(LOG_ERROR, "Failed in reading the parent object stream");
+					return false;
+				}
+			}
+		}
+		else{
+			Log(LOG_ERROR, "Failed in reading Document catalog dictionary");
+			return false;
+		}
+	}
+
 	Log(LOG_INFO, "Export started");
 	int i, j;
 	file=new ofstream(fileName, ios::binary);
@@ -114,6 +142,17 @@ bool PDFExporter::exportToFile(char* fileName, bool encryption){
 				continue;
 			}
 		}		
+		// if the object is a decoded object stream, re-fill the stream and encode data
+		if(objType==Type::Stream){
+			Stream* streamObject=(Stream*)refObj;
+			if(streamObject->used==true && streamObject->objStream){
+				Log(LOG_DEBUG, "This object stream is an used object stream");
+				if(!constructObjStm(streamObject)){
+					Log(LOG_ERROR, "Object stream construction failed");
+					return false;
+				}
+			}
+		}
 		// (objNum) (genNum) obj
 		PP->Reference[i]->position=count;
 		sprintf(buffer, "%d %d obj%c", i, PP->Reference[i]->genNumber, LF);
@@ -684,4 +723,88 @@ void PDFExporter::constructXRefStm(){
   XRefStm.Encode();
 	XRefStm.StmDict.Append("Length", (void*)&(XRefStm.encoDataLen), Type::Int);
 	XRefStm.StmDict.Merge(PP->trailer);
+}
+
+bool PDFExporter::constructObjStm(Stream* objStream){
+	// Document catalog dictionary may be skipped (when encryption is on)
+	Log(LOG_DEBUG, "Construct object stream");
+	PDFStr** exported_objects=new PDFStr*[objStream->numObjects];
+	int i, j;
+	for(i=0; i<objStream->numObjects; i++){
+		int objNumber=objStream->includedObjNumbers[i];
+		Log(LOG_DEBUG, "#%d: object number %d", i, objNumber);
+		void* object;
+		int objType;
+		if(PP->ReadRefObj(PP->Reference[objNumber], &object, &objType)){
+			vector<unsigned char> data;
+			data=exportObj(object, objType, false, objNumber, 0);
+			exported_objects[i]=new PDFStr(data.size());
+			for(j=0; j<data.size(); j++){
+				exported_objects[i]->decrData[j]=data[j];
+			}
+		}else{
+			Log(LOG_ERROR, "ReadRefObj error, skip it");
+			return false;
+		}
+	}
+
+	// body
+	int body_length=0;
+	for(i=0; i<objStream->numObjects; i++){
+		Log(LOG_DEBUG, "#%d: Length %d", i, exported_objects[i]->decrDataLen);
+		body_length+=exported_objects[i]->decrDataLen+2; // +2 is for CRLF
+	}
+	unsigned char* objStream_body=new unsigned char[body_length];
+	int currentpos=0;
+	for(i=0; i<objStream->numObjects; i++){
+		objStream->includedObjOffsets[i]=currentpos;
+		for(j=0; j<exported_objects[i]->decrDataLen; j++){
+			objStream_body[currentpos]=exported_objects[i]->decrData[j];
+			currentpos++;
+		}
+		objStream_body[currentpos]=CR;
+		objStream_body[currentpos+1]=LF;
+		currentpos+=2;
+	}
+	// Log(LOG_DEBUG, "Constructed object stream: %s", objStream->decoData);
+
+	// header
+	vector<unsigned char> header;
+	char* headerBuffer=new char[64];
+	for(i=0; i<objStream->numObjects; i++){
+		sprintf(headerBuffer, "%d %d ", objStream->includedObjNumbers[i], objStream->includedObjOffsets[i]);
+		for(j=0; j<strlen(headerBuffer); j++){
+			header.push_back((unsigned char)headerBuffer[j]);
+		}
+	}
+	header.push_back(CR);
+	header.push_back(LF);
+	//unsigned char* objStream_header=new unsigned char[header.size()+1];
+	//for(i=0; i<header.size(); i++){
+	//	objStream_header[i]=header[i];
+	//}
+	//objStream_header[header.size()]='\0';
+	//Log(LOG_DEBUG, "Object stream header: %s", objStream_header);
+
+	// delete[] objStream->decoData;
+	objStream->decoDataLen=header.size()+body_length;
+	objStream->decoData=new unsigned char[objStream->decoDataLen+1];
+	for(i=0; i<header.size(); i++){
+		objStream->decoData[i]=header[i];
+	}
+	for(i=0; i<body_length; i++){
+		objStream->decoData[i+header.size()]=objStream_body[i];
+	}
+	objStream->decoData[objStream->decoDataLen]='\0';
+
+	int* First=new int();
+	*First=header.size();
+	objStream->StmDict.Update("First", First, Type::Int);
+	objStream->StmDict.Update("N", &(objStream->numObjects), Type::Int);
+	objStream->Encode();
+
+	delete[] headerBuffer;
+	delete[] objStream_body;
+
+	return true;
 }

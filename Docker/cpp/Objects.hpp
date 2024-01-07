@@ -125,9 +125,16 @@ public:
 	int encoDataLen; // len(encoData)
 	int encrDataLen; // len(encrData)
 	bool decrypted;
+	bool decoded;
+	bool used;
+	bool objStream;
 	Stream();
 	bool Decode();
 	bool Encode();
+	int numObjects;
+	int* includedObjNumbers;
+	int objStreamOffset;
+	int* includedObjOffsets;
 };
 
 class Page{

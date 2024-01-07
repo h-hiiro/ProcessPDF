@@ -21,6 +21,7 @@ private:
 	void constructXRefStm();
 	Stream XRefStm;
 	bool XRefStmUsed;
+	bool constructObjStm(Stream* objStream);
 public:
 	PDFExporter(PDFParser* parser);
 	bool exportToFile(char* fileName);

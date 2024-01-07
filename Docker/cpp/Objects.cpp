@@ -251,7 +251,9 @@ Indirect::Indirect():
 }
 
 Stream::Stream():
-	decrypted(false)
+	decrypted(false),
+	decoded(false),
+	used(false)
 {	
 }
 
@@ -424,7 +426,7 @@ bool Stream::Decode(){
 	}
 	decoDataLen=decoBufLen;
 	decoData=decoBuffer;
-
+	decoded=true;
 	return true;
 }
 
